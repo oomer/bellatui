@@ -8,6 +8,7 @@ ifeq ($(UNAME), Darwin)
 	SDKBASE		= ../bella_engine_sdk
 
 	SDKFNAME    = lib$(SDKNAME).dylib
+	ZMQNAME    = libzmq.5.dylib
 	INCLUDEDIRS	= -I$(SDKBASE)/src
 	INCLUDEDIRS2	= -I../cppzmq
 	INCLUDEDIRS3	= -I../libzmq/include
@@ -65,6 +66,8 @@ else
 	SDKBASE		= ../bella_engine_sdk
 
 	SDKFNAME    = lib$(SDKNAME).so
+	ZMQNAME    = libzmq.so.5
+	SODNAME    = libsodium.so.23
 	INCLUDEDIRS	= -I$(SDKBASE)/src
 	INCLUDEDIRS2    = -I../cppzmq
 	INCLUDEDIRS3    = -I../libzmq/include
@@ -126,7 +129,10 @@ $(OUTPUT): $(OBJ)
 	@mkdir -p $(@D)
 	$(CXX) -o $@ $^ $(LINKFLAGS) $(LIBDIRS) $(LIBDIRS2) $(LIBS)
 	@cp $(LIBDIR)/$(SDKFNAME) $(BINDIR)/$(SDKFNAME)
-	@cp $(ZMQDIR)/libzmq.5.dylib $(BINDIR)/libzmq.5.dylib
+	@cp $(ZMQDIR)/$(ZMQNAME) $(BINDIR)/$(ZMQNAME)
+ifeq ($(UNAME), Linux)
+	@cp $(SODDIR)/$(SODNAME) $(BINDIR)/$(SODNAME)
+endif
 
 .PHONY: clean
 clean:
