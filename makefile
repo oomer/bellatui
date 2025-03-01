@@ -72,6 +72,8 @@ else
 	INCLUDEDIRS2    = -I../cppzmq
 	INCLUDEDIRS3    = -I../libzmq/include
 	LIBDIR		= $(SDKBASE)/lib
+	ZMQDIR		= ../libzmq/build/lib
+	SODDIR		= /usr/lib/x86_64-linux-gnu/
 	LIBDIRS		= -L$(LIBDIR)
 	LIBDIRS2        = -L../libzmq/build/lib
 	OBJDIR		= obj/$(UNAME)
@@ -83,7 +85,6 @@ else
 
 	CCFLAGS		= -m64\
 				  -Wall\
-				  -Werror\
 				  -fvisibility=hidden\
 				  -D_FILE_OFFSET_BITS=64\
 				  -O3\
