@@ -220,7 +220,8 @@ int DL_main(Args& args)
 
     if (args.have("--serverAddress")) 
     {
-        server_address = std::string(args.value("--serverAddress").buf());
+        //server_address = std::string(args.value("--serverAddress").buf());
+        server_address = args.value("--serverAddress").buf();
     }
 
     if (args.have("--heartbeatPort")) 
