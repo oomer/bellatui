@@ -32,22 +32,22 @@ std::atomic<bool> abort_state (false);
 std::atomic<bool> server (false);
 
 
-std::string get_pubkey_from_srv();
+std::string get_pubkey_from_srv(std::string server_address, uint16_t pubkey_port);
 
 void client_thread( std::string server_pkey, 
                     std::string client_pkey, 
                     std::string client_skey,
-                    std::string ip_address,
-                    int port); 
+                    std::string server_address,
+                    uint16_t command_port); 
 void server_thread( std::string server_skey, 
-                    int port,
+                    uint16_t command_port,
                     Engine engine);
 
 void openFileWithDefaultProgram(const std::string& filePath);
 
 bool ends_with_suffix(const std::string& str, const std::string& suffix);
 
-void pkey_server(const std::string& pub_key);
+void pkey_server(const std::string& pub_key, uint16_t heartbeat_port);
 
 struct MyEngineObserver : public EngineObserver
 {
@@ -96,14 +96,13 @@ private:
     }
 };
 
-//void heartbeat_thread(std::string server_skey, bool is_server, int port) {
 void heartbeat_thread(  std::string server_pkey, //CLIENT
                         std::string server_skey, //SERVER
                         std::string client_pkey, //CLIENT
                         std::string client_skey, //CLIENT
                         bool is_server,  //BOTH
-                        std::string ip_address,  //CLIENT
-                        int port ) { //BOTH
+                        std::string server_address,  //CLIENT
+                        uint16_t heartbeat_port ) { //BOTH
     heartbeat_state = true;
 
     zmq::context_t ctx;
@@ -113,7 +112,8 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
         heartbeat_sock = zmq::socket_t(ctx, zmq::socket_type::rep);
         heartbeat_sock.set(zmq::sockopt::curve_server, true);
         heartbeat_sock.set(zmq::sockopt::curve_secretkey, server_skey);
-        std::string url = "tcp://*:" + std::to_string(port);
+        std::string url = "tcp://*:" + std::to_string(heartbeat_port);
+        std::cout << "heart url " << url << std::endl;
         heartbeat_sock.bind(url);
         while(true) {
             //Start polling heartbeats once client connects
@@ -140,7 +140,7 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
         heartbeat_sock.set(zmq::sockopt::curve_publickey, client_pkey);
         heartbeat_sock.set(zmq::sockopt::curve_secretkey, client_skey);
         heartbeat_sock.set(zmq::sockopt::linger, 1); // Close immediately on disconnect
-        std::string url = "tcp://" + ip_address + ":" +std::to_string(port);
+        std::string url = "tcp://" + server_address + ":" +std::to_string(heartbeat_port);
         heartbeat_sock.connect(url);
         //int heartbeat_count = 0;
         //std::vector<zmq::pollitem_t> items = {};
@@ -178,15 +178,20 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
 int DL_main(Args& args)
 {
     const size_t chunk_size = 65536;
-    int port = 5555;
-    logBanner("Bella Engine SDK (version: %s, build date: %llu)",
+
+    std::string server_address = "localhost";
+    uint16_t command_port = 5797;
+    uint16_t heartbeat_port = 5798;
+    uint16_t pubkey_port = 5799;
+
+    /*logBanner("Bella Engine SDK (version: %s, build date: %llu)",
         bellaSdkVersion().toString().buf(),
         bellaSdkBuildDate()
-   );
+   );*/
 
-    args.add("ip",  "serverAddress", "",   "Bella render server ip address");
-    args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
-    args.add("hp",  "heartPort",   "5555",   "tcp port for zmq server socket for heartbeats");
+    args.add("ip",  "serverAddress", "localhost",   "Bella render server ip address");
+    args.add("cp",  "commandPort",   "5556",   "tcp port for zmq server socket for commands");
+    args.add("hp",  "heartbeatPort",   "5555",   "tcp port for zmq server socket for heartbeats");
     args.add("s",  "server",   "",   "turn on server mode");
     //args.add("e",  "ext",   "",   "set render extension, default png");
 
@@ -208,6 +213,32 @@ int DL_main(Args& args)
         server=true;
     }
 
+    if (args.have("--serverAddress")) 
+    {
+        server_address = std::string(args.value("--serverAddress").buf());
+    }
+
+    if (args.have("--heartbeatPort")) 
+    {
+        String argString = args.value("--heartbeatPort");
+        uint16_t u16; 
+        if (argString.parse(u16)) {
+            heartbeat_port = u16;
+        } else {
+            std::cerr << "invalid --heartbeatPort" << argString << std::endl;
+        }
+    }
+    if (args.have("--commandPort")) 
+    {
+            String argString = args.value("--commandPort");
+            uint16_t u16; 
+            if (argString.parse(u16)) {
+                command_port = u16;
+            } else {
+            std::cerr << "invalid --commandPort" << argString << std::endl;
+            }
+    }
+
     Engine engine;
     engine.scene().loadDefs();
 
@@ -221,7 +252,7 @@ int DL_main(Args& args)
             std::cout << "\ncurve keypair gen failed.";
             exit(EXIT_FAILURE);
         }
-        std::thread server_t(server_thread, server_skey, 5556, engine);
+        std::thread server_t(server_thread, server_skey, command_port, engine);
         ///std::thread heartbeat_t(heartbeat_thread, server_skey, server.load(), 5555);
         std::thread heartbeat_t(heartbeat_thread,   //function
                                 "",                 //NA Public server key 
@@ -230,11 +261,11 @@ int DL_main(Args& args)
                                 "",                 //NA Secret client key 
                                 true,               //is server 
                                 "",                 //FQDN or ip address of server 
-                                port);              //bind port
+                                heartbeat_port);              //bind port
                                        //
         while(true) { // awaiting new client loop
             heartbeat_state = true;
-            pkey_server(server_pkey); // blocking wait client to get public key
+            pkey_server(server_pkey, pubkey_port); // blocking wait client to get public key
             std::cout << "Client connected" << std::endl; 
 
             while(true) { // inner loop
@@ -260,17 +291,19 @@ int DL_main(Args& args)
             exit(EXIT_FAILURE);
         }
 
-        std::string server_pkey = get_pubkey_from_srv();
+        std::string server_pkey = get_pubkey_from_srv(server_address, pubkey_port);
         std::string client_pkey_str(client_pkey);
         std::string client_skey_str(client_skey);
+
+        std::cout << server_address << " " << command_port << std::endl;
 
         // Multithreaded
         std::thread command_t(  client_thread, 
                                 server_pkey, 
                                 client_pkey_str, 
                                 client_skey_str,
-                                "localhost",
-                                5556);
+                                server_address,
+                                command_port);
         //std::thread heartbeat_t(heartbeat_thread, server_pkey, client_pkey_str, client_skey_str);
         std::thread heartbeat_t(heartbeat_thread,   //function
                                 server_pkey,        //Public server key  
@@ -278,8 +311,8 @@ int DL_main(Args& args)
                                 client_pkey_str,    //Public client key
                                 client_skey_str,    //Secret client key
                                 false,              //is server
-                                ip_address,         //Server FQDN or ip address
-                                port);              //connect port
+                                server_address,         //Server FQDN or ip address
+                                heartbeat_port);              //connect port
 
         while (true) {
             if (!heartbeat_state.load()) {
@@ -297,7 +330,7 @@ int DL_main(Args& args)
     }
 }
 
-std::string get_pubkey_from_srv() {
+std::string get_pubkey_from_srv(std::string server_address, uint16_t pubkey_port) {
     // No authentication is used, server will give out pubkey to anybody
     // Could use a unique message but since socket is unencrypted this provides
     // no protection. In main loop we establish an encrypted connection with the server
@@ -307,7 +340,8 @@ std::string get_pubkey_from_srv() {
     // 0MQ after we establish our intitial encrypted socket
     zmq::context_t ctx;
     zmq::socket_t pubkey_sock(ctx, zmq::socket_type::req);
-    pubkey_sock.connect("tcp://127.0.0.1:9555");
+    std::string url = "tcp://" + server_address + ":" + std::to_string(pubkey_port);
+    pubkey_sock.connect(url);
     zmq::message_t z_out(std::string("Bellarender123"));
 
     try {
@@ -330,9 +364,9 @@ std::string get_pubkey_from_srv() {
 void client_thread( std::string server_pkey, 
                     std::string client_pkey, 
                     std::string client_skey,
-                    std::string ip_address,
-                    int port ) {
-
+                    std::string server_address,
+                    uint16_t command_port ) {
+    std::cout << "client thread: " << server_address << " " << command_port << std::endl;
     const size_t chunk_size = 65536;
     zmq::context_t ctx;
     zmq::socket_t command_sock (ctx, zmq::socket_type::req);
@@ -342,7 +376,10 @@ void client_thread( std::string server_pkey,
     command_sock.set(zmq::sockopt::curve_publickey, client_pkey);
     command_sock.set(zmq::sockopt::curve_secretkey, client_skey);
     command_sock.set(zmq::sockopt::linger, 1); // Close immediately on disconnect
-    std::string url = "tcp://" + ip_address+ ":" + std::to_string(port);
+    
+    //std::string url = "tcp://" + server_address+ ":" + std::to_string(command_port);
+    std::string url = "tcp://" + server_address + ":" + std::to_string(command_port);
+    std::cout << "client thread " << url << std::endl;
     command_sock.connect(url);
     
     std::string input;
@@ -523,7 +560,7 @@ void client_thread( std::string server_pkey,
 }
 
 void server_thread(     std::string server_skey, 
-                        int port,
+                        uint16_t command_port,
                         Engine engine) {
     MyEngineObserver engineObserver;
     engine.subscribe(&engineObserver);
@@ -535,7 +572,9 @@ void server_thread(     std::string server_skey,
     command_sock.set(zmq::sockopt::curve_server, true);
     command_sock.set(zmq::sockopt::curve_secretkey, server_skey);
     //command_sock.set(zmq::sockopt::linger, 100); // Close immediately on disconnect
-    command_sock.bind("tcp://*:5556");
+    std::string url = "tcp://*:" + std::to_string(command_port);
+    std::cout << "server thread " << url << std::endl;
+    command_sock.bind(url);
     zmq::message_t client_response; 
 
     try {
@@ -746,10 +785,13 @@ bool ends_with_suffix(const std::string& str, const std::string& suffix) {
 }
 
 // Blocking zmq rep socket to pass server_public_key
-void pkey_server(const std::string& pub_key) {
+void pkey_server(const std::string& pub_key, uint16_t heartbeat_port) {
     zmq::context_t ctx;
     zmq::socket_t sock(ctx, zmq::socket_type::rep);
-    sock.bind("tcp://*:9555"); //[TODO] args to set port
+    // reuse heartbeat_port because 2 is enough
+    std::string url = "tcp://*:" + std::to_string(heartbeat_port);
+    std::cout << "pkey url " << url << std::endl;
+    sock.bind(url); 
 
     zmq::message_t z_in;
     std::cout << "Entered: Public Key Serving Mode" << std::endl; 
