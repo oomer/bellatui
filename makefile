@@ -62,12 +62,15 @@ ifeq ($(UNAME), Darwin)
 				  -weak_library $(LIBDIR)/libvulkan.dylib
 else
 
-	SDKBASE		= .
+	SDKBASE		= ../bella_engine_sdk
 
 	SDKFNAME    = lib$(SDKNAME).so
 	INCLUDEDIRS	= -I$(SDKBASE)/src
+	INCLUDEDIRS2    = -I../cppzmq
+	INCLUDEDIRS3    = -I../libzmq/include
 	LIBDIR		= $(SDKBASE)/lib
 	LIBDIRS		= -L$(LIBDIR)
+	LIBDIRS2        = -L../libzmq/build/lib
 	OBJDIR		= obj/$(UNAME)
 	BINDIR		= bin/$(UNAME)
 	OUTPUT      = $(BINDIR)/$(OUTNAME)
@@ -82,6 +85,9 @@ else
 				  -D_FILE_OFFSET_BITS=64\
 				  -O3\
 				  $(INCLUDEDIRS)
+				  $(INCLUDEDIRS2)\
+                  $(INCLUDEDIRS3)\
+                  $(LIBDIRS2)
 
 	CFLAGS		= $(CCFLAGS)\
 				  -std=c11
