@@ -24,10 +24,8 @@ Entered: Public Key Serving Mode
 Client connected
 ```
 
-<<<<<<< HEAD
 
 ## Build 
-
 
 ##MacOS
 ```
@@ -57,13 +55,11 @@ makefile
 
 
 ##Linux
-=======
 # Build 
 
 # Linux
 
 ### bella_engine_sdk
->>>>>>> 6760d2b (added msbuild file, detailed instructions to build on each platform, and arg support for port and address)
 ```
 curl -O https://downloads.bellarender.com/bella_engine_sdk-24.6.0.tar.gz
 tar -xvf bella_engine_sdk-24.6.0.tar.gz
@@ -100,12 +96,10 @@ cd cppzmq
 mkdir build
 cd build
 cmake .. 
-<<<<<<< HEAD
 
 g++ bellatui.cpp -o server -lzmq -Wl,-rpath,.
 ```
 
-=======
 ```
 
 ### bellatui
@@ -117,7 +111,11 @@ make
 ```
 
 # Windows
+https://aka.ms/vs/17/release/vs_BuildTools.exe
+[] Desktop development wiht C++
 
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
 vcpkg install boost:x64-windows boost:x86-windows zeromq[sodium]:x64-windows zeromq[sodium]:x86-windows
 
 x64 Developer console
@@ -180,7 +178,6 @@ make
 ```
 g++ -std=c++11 server.cpp -o server -I../libzmq/include -I../cppzmq -L../libzmq/build/lib -lzmq -Wl,-rpath,. 
 g++ -std=c++11 server.cpp -o server -I../libzmq/include -I../cppzmq -L../libzmq/build/lib -lzmq -Wl,-rpath,. 
->>>>>>> 6760d2b (added msbuild file, detailed instructions to build on each platform, and arg support for port and address)
 
 # Windows
 ```
@@ -193,9 +190,6 @@ cl /std:c++17 server.cpp -Fe:server.exe -Ic:\Users\cupcake\github\vcpkg\installe
 clang++ -o bin/Darwin/client obj/Darwin/client.o -mmacosx-version-min=11.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -framework Cocoa -framework IOKit -framework CoreVideo -framework CoreFoundation -framework Accelerate -fvisibility=hidden -O5 -rpath @executable_path -weak_library ./lib/libvulkan.dylib -L./lib -L../libzmq/build/lib -lbella_engine_sdk -lm -lzmq -ldl
 
 ```
-<<<<<<< HEAD
-=======
 
 
 
->>>>>>> 6760d2b (added msbuild file, detailed instructions to build on each platform, and arg support for port and address)

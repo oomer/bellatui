@@ -87,7 +87,7 @@ else
 				  -fvisibility=hidden\
 				  -D_FILE_OFFSET_BITS=64\
 				  -O3\
-				  $(INCLUDEDIRS)
+				  $(INCLUDEDIRS)\
 				  $(INCLUDEDIRS2)\
                   $(INCLUDEDIRS3)\
                   $(LIBDIRS2)
@@ -130,6 +130,7 @@ $(OUTPUT): $(OBJ)
 	$(CXX) -o $@ $^ $(LINKFLAGS) $(LIBDIRS) $(LIBDIRS2) $(LIBS)
 	@cp $(LIBDIR)/$(SDKFNAME) $(BINDIR)/$(SDKFNAME)
 	@cp $(ZMQDIR)/$(ZMQNAME) $(BINDIR)/$(ZMQNAME)
+		chmod 755 $(BINDIR)/$(ZMQNAME)
 ifeq ($(UNAME), Linux)
 	@cp $(SODDIR)/$(SODNAME) $(BINDIR)/$(SODNAME)
 endif
