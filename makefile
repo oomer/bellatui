@@ -12,6 +12,7 @@ ifeq ($(UNAME), Darwin)
 	INCLUDEDIRS2	= -I../cppzmq
 	INCLUDEDIRS3	= -I../libzmq/include
 	LIBDIR		= $(SDKBASE)/lib
+	ZMQDIR		= ~/homebrew/Cellar/zeromq/4.3.5_1/lib
 	LIBDIRS2		= -L../libzmq/build/lib
 	LIBDIRS		= -L$(LIBDIR)
 	OBJDIR		= obj/$(UNAME)
@@ -119,6 +120,7 @@ $(OUTPUT): $(OBJ)
 	@mkdir -p $(@D)
 	$(CXX) -o $@ $^ $(LINKFLAGS) $(LIBDIRS) $(LIBDIRS2) $(LIBS)
 	@cp $(LIBDIR)/$(SDKFNAME) $(BINDIR)/$(SDKFNAME)
+	@cp $(ZMQDIR)/libzmq.5.dylib $(BINDIR)/libzmq.5.dylib
 
 .PHONY: clean
 clean:

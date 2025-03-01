@@ -187,7 +187,7 @@ int DL_main(Args& args)
         bellaSdkBuildDate()
    );*/
 
-    args.add("ip",  "serverAddress", "localhost",   "Bella render server ip address");
+    args.add("ip",  "serverAddress", "",   "Bella render server ip address");
     args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
     args.add("hp",  "heartbeatPort",   "",   "tcp port for zmq server socket for heartbeats");
     args.add("pp",  "publickeyPort",   "",   "tcp port for zmq server socket for server pubkey");
