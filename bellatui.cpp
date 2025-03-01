@@ -26,7 +26,7 @@
 using namespace dl;
 using namespace dl::bella_sdk;
 
-std::atomic<bool> heartbeat_state (true);
+//std::atomic<bool> heartbeat_state (true);
 std::atomic<bool> connection_state (false);
 std::atomic<bool> abort_state (false);
 std::atomic<bool> server (false);
@@ -104,7 +104,6 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
                         bool is_server,  //BOTH
                         std::string server_address,  //CLIENT
                         uint16_t heartbeat_port ) { //BOTH
-    heartbeat_state = true;
 
     zmq::context_t ctx;
     zmq::socket_t heartbeat_sock; //top scope
@@ -121,7 +120,7 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
                 zmq::poll(&response_item, 1, 5000); // Wait for response with timeout
 
-                if (response_item.revents & ZMQ_POLLIN) {
+                if (response_item.revents & ZMQ_POLLIN) { //heartbeat
                     zmq::message_t message;
                     //ZIN<<<
                     heartbeat_sock.recv(message, zmq::recv_flags::none);
@@ -129,7 +128,7 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
                     heartbeat_sock.send(zmq::message_t("ACK"), zmq::send_flags::dontwait); // No block
                 } else { //timeout
                     std::cout << "Bella Client Lost" << std::endl;
-                    heartbeat_state = false;
+                    connection_state = false;
                 }
             } 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -161,7 +160,6 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
                     //std::cout << "Heartbeat Response: " << std::endl;
                 } else {
                     std::cout << "Bella Server is unavailable" << std::endl;
-                    heartbeat_state = false;
                     connection_state = false;
                     break;
                 }
@@ -285,25 +283,25 @@ int DL_main(Args& args)
                                 heartbeat_port);              //bind port
                                        //
         while(true) { // awaiting new client loop
-            heartbeat_state = true;
             std::cout << "Awaiting new client ..." << std::endl;
             pkey_server(server_pkey, publickey_port); // blocking wait client to get public key
             std::cout << "Client connected" << std::endl; 
+            connection_state = true;
 
             while(true) { // inner loop
-                if (heartbeat_state.load()==false) {
+                if (connection_state.load()==false) { 
                     std::cout << "Client connectiono dead" << std::endl;
                     break; // Go back to awaiting client
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         }
-        abort_state==true;
+        //abort_state==true;
         server_t.join();
         heartbeat_t.join();
         return 0;      
 
-    } else {
+    } else { //Client
         char client_skey[41] = { 0 };
         char client_pkey[41] = { 0 };
         if ( zmq_curve_keypair(&client_pkey[0], &client_skey[0])) {
@@ -334,11 +332,11 @@ int DL_main(Args& args)
                                 heartbeat_port);              //connect port
 
         while (true) {
-            if (!heartbeat_state.load()) {
+            /*if (!heartbeat_state.load()) {
                 std::cout << "Dead" << std::endl;
                 abort_state==true;
                 break;
-            }
+            }*/
             if (connection_state.load() ==  false) {
                 std::cout << "Dead2" << std::endl;
                 abort_state==true;
@@ -612,6 +610,7 @@ void server_thread(     std::string server_skey,
         std::ofstream binaryOutputFile;// for writing
         std::ifstream binaryInputFile;// for reading
         while (true) {
+            std::cout << "expect\n";
             zmq::message_t msg_command; 
             //ZIN<<<
             command_sock.recv(msg_command, zmq::recv_flags::none);
@@ -626,10 +625,7 @@ void server_thread(     std::string server_skey,
                 std::cout << "Client disconnecting..." << std::endl;
                 //>>>ZOUT
                 command_sock.send(zmq::message_t("RDY"), zmq::send_flags::none); 
-                heartbeat_state = false;
-                connection_state = false;
-                abort_state = true;
-                break;
+                connection_state = false; //<<
             // RENDER
             } else if (client_command == "render") {
                 std::cout << "start render" << std::endl;

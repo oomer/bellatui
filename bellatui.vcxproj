@@ -91,7 +91,19 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <PostBuildEvent>
-      <Command>copy "$(ProjectDir)..\bella_engine_sdk\lib\*.dll" "$(TargetDir)"</Command>
+      <Command>echo Post-build event started &amp; 
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\bella_engine_sdk.dll" "$(TargetDir)" &amp; 
+      echo bella_engine_sdk.dll copied &amp; 
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_core.dll" "$(TargetDir)" &amp; 
+      echo dl_core.dll copied &amp; 
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_oidn_core.dll" "$(TargetDir)" &amp; 
+      echo dl_oidn_core.dll copied &amp; 
+      copy "$(ProjectDir)..\..\vcpkg\installed\x64-windows\bin\libzmq-mt-4_3_5.dll" "$(TargetDir)" &amp;
+      echo libzmq-mt-4_3_5.dll copied &amp; 
+      copy "$(ProjectDir)..\..\vcpkg\installed\x64-windows\bin\libsodium.dll" "$(TargetDir)" &amp; 
+      echo libsodium.dll copied &amp; 
+      echo Post-build event finished</Command>
+
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -149,3 +161,4 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
+
