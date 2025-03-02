@@ -77,6 +77,19 @@ apt install libgnutls28-dev
 apt install pkg-config 
 ```
 
+```
+dnf groupinstall -y "Development Tools"
+dnf install -y libX11-devel
+dnf install -y mesa-libGL-devel
+dnf install -y libtool
+dnf install -y libsodium-devel
+dnf install -y cmake
+dnf install -y gnutls-devel
+dnf install -y pkg-config
+```
+
+
+
 ### libzmq
 ```
 git clone https://github.com/zeromq/libzmq
@@ -96,13 +109,9 @@ cd cppzmq
 mkdir build
 cd build
 cmake .. 
-
-g++ bellatui.cpp -o server -lzmq -Wl,-rpath,.
 ```
 
-```
-
-### bellatui
+## bellatui
 ```
 cd ../..
 git clone https://github.com/oomer/bellatui.git

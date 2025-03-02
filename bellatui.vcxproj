@@ -72,7 +72,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>lib</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories>~/vcpkg/installed/x64-windows/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>../vcpkg/installed/x64-windows/lib</AdditionalLibraryDirectories>
       <AdditionalLibraryDirectories>../bella_engine_sdk/lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>libzmq-mt-4_3_5.lib;bella_engine_sdk.lib;Shlwapi.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <DelayLoadDLLs>vulkan-1.dll</DelayLoadDLLs>
@@ -98,9 +98,9 @@
       echo dl_core.dll copied &amp; 
       copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_oidn_core.dll" "$(TargetDir)" &amp; 
       echo dl_oidn_core.dll copied &amp; 
-      copy "$(ProjectDir)..\..\vcpkg\installed\x64-windows\bin\libzmq-mt-4_3_5.dll" "$(TargetDir)" &amp;
+      copy "$(ProjectDir)..\vcpkg\installed\x64-windows\bin\libzmq-mt-4_3_5.dll" "$(TargetDir)" &amp;
       echo libzmq-mt-4_3_5.dll copied &amp; 
-      copy "$(ProjectDir)..\..\vcpkg\installed\x64-windows\bin\libsodium.dll" "$(TargetDir)" &amp; 
+      copy "$(ProjectDir)..\vcpkg\installed\x64-windows\bin\libsodium.dll" "$(TargetDir)" &amp; 
       echo libsodium.dll copied &amp; 
       echo Post-build event finished</Command>
 

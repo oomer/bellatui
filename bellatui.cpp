@@ -115,6 +115,7 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
         std::string url = "tcp://*:" + std::to_string(heartbeat_port);
         heartbeat_sock.bind(url);
         while(true) {
+            std::cout << "HT" << std::endl;
             //Start polling heartbeats once client connects
             if (connection_state == true) {
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
@@ -153,7 +154,7 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
                 heartbeat_sock.send(zmq::message_t("ACK"), zmq::send_flags::none);
                 // Wait for response (poll for ZMQ_POLLIN)
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
-                zmq::poll(&response_item, 1, 100); // Wait for response with timeout
+                zmq::poll(&response_item, 1, 5000); // Wait for response with timeout
                 if (response_item.revents & ZMQ_POLLIN) {
                     zmq::message_t msg_response;
                     heartbeat_sock.recv(msg_response, zmq::recv_flags::none);
@@ -187,7 +188,7 @@ int DL_main(Args& args)
         bellaSdkBuildDate()
    );*/
 
-    args.add("ip",  "serverAddress", "",   "Bella render server ip address");
+    args.add("sa",  "serverAddress", "",   "Bella render server ip address");
     args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
     args.add("hp",  "heartbeatPort",   "",   "tcp port for zmq server socket for heartbeats");
     args.add("pp",  "publickeyPort",   "",   "tcp port for zmq server socket for server pubkey");
