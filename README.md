@@ -14,7 +14,7 @@ command: help, send, get, stat, render, stop
 
 [MacOS](https://a4g4.c14.e2-1.dev/bellatui/bellatui-mac.zip)
 ```
-You need to know how Apple Gatekeeper because non-notarized executables are blocked by default.
+Apple Gatekeeper blocks non-notarized executables by default.
 ```
 
 [Ubuntu Linux](https://a4g4.c14.e2-1.dev/bellatui/bellatui-linux.tar.gz)
