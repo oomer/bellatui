@@ -118,7 +118,6 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
         std::string url = "tcp://*:" + std::to_string(heartbeat_port);
         heartbeat_sock.bind(url);
         while(true) {
-            std::cout << "HT" << std::endl;
             //Start polling heartbeats once client connects
             if (connection_state == true) {
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
@@ -630,7 +629,6 @@ void server_thread(     std::string server_skey,
         std::ofstream binaryOutputFile;// for writing
         std::ifstream binaryInputFile;// for reading
         while (true) {
-            std::cout << "expect\n";
             zmq::message_t msg_command; 
             //ZIN<<<
             command_sock.recv(msg_command, zmq::recv_flags::none);
