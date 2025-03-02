@@ -13,7 +13,7 @@ ifeq ($(UNAME), Darwin)
 	INCLUDEDIRS2	= -I../cppzmq
 	INCLUDEDIRS3	= -I../libzmq/include
 	LIBDIR		= $(SDKBASE)/lib
-	ZMQDIR		= ~/homebrew/Cellar/zeromq/4.3.5_1/lib
+	ZMQDIR		= ../libzmq/build/lib
 	LIBDIRS2		= -L../libzmq/build/lib
 	LIBDIRS		= -L$(LIBDIR)
 	OBJDIR		= obj/$(UNAME)
