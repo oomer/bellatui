@@ -2,28 +2,55 @@
 Cross platform console based bella render server/client
 
 A command line bella renderer with encrypted networking with an interactive 
-TUI ( text user interface )for uploading .bsz scenes, starting
-render, downloading images. Additional commands allow viewing progress, stopping renders, etc
+TUI ( text user interface )for uploading .bsz scenes, starting renders, downloading images. Additional commands allow viewing progress, stopping renders, etc
 
 ## Usage
-The same executable can be started in either client or server mode
 
-Client
-```
-bellatui
+command: help, send, get, stat, render, stop
 
-========= Bella Engine SDK (version: 24.6.0.0, build date: 1734912267) =========
-bellazmq connecting to server...
-connection successful
+# Precompile Binaries
+
+[Windows](https://a4g4.c14.e2-1.dev/bellatui/bellatui-win.zip)
+
+[MacOS](https://a4g4.c14.e2-1.dev/bellatui/bellatui-mac.zip)
 ```
+You need to know how Apple Gatekeeper because non-notarized executables are blocked by default.
+```
+
+[Ubuntu Linux](https://a4g4.c14.e2-1.dev/bellatui/bellatui-linux.tar.gz)
+```
+apt install -y libsodium-dev
+```
+
+
+### Client
+```
+bellatui --serverAddress:discord.beantip.ca
+
+bellatui connecting to discord.beantip.ca ...
+Connection to discord.beantip.ca successful
+send orange-juice.bsz
+Sending:orange-juice.bsz
+Server Readiness: RDY
+sending
+.........................................................................
+render
+Server response: render started...type stat to get progress
+stat 
+Server response: Saturn | Elapsed: 6s | Bench: 1704
+stat 
+Server response: Saturn | Elapsed: 41s | Progress: 22.65%
+```
+
+
 Server
 ```
-bellatui -s
-========= Bella Engine SDK (version: 24.6.0.0, build date: 1734912267) =========
-Entered: Public Key Serving Mode
+bellatui --server
+BellaTUI server started ...
+Awaiting new client ...
+expect
 Client connected
 ```
-
 
 ## Build 
 
@@ -96,7 +123,17 @@ git clone https://github.com/zeromq/libzmq
 cd libzmq
 mkdir build
 cd build
+
+This one
 cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium
+
+
+cmake .. -DENABLE_DRAFTS=OFF -DWITH_TLS=OFF -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium
+
+cmake .. -DENABLE_DRAFTS=OFF -DWITH_TLS=OFF -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium -DSODIUM_INCLUDE_DIRS=/usr/include -DSODIUM_LIBRARIES=/usr/lib/x86_64-linux-gnu/libsodium.a
+
+cmake .. -DENABLE_DRAFTS=OFF -DWITH_TLS=OFF -DENABLE_CURVE=ON -DWITH_LIBSODIUM=../../libsodium/src/libsodium/include/sodium -DSODIUM_INCLUDE_DIRS=../../libsodium/src/libsodium/include -DSODIUM_LIBRARIES=../../libsodium/src/libsodium/.libs/libsodium.a
+
 make -j4
 make install
 ```
@@ -121,16 +158,27 @@ make
 
 # Windows
 https://aka.ms/vs/17/release/vs_BuildTools.exe
-[] Desktop development wiht C++
 
+[ ] Desktop development wiht C++
+
+Get bella_engine_sdk
+
+#### x64 Developer console
+```
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
-vcpkg install boost:x64-windows boost:x86-windows zeromq[sodium]:x64-windows zeromq[sodium]:x86-windows
+vcpkg install zeromq[sodium]:x64-windows 
 
-x64 Developer console
-```
 git clone https://github.com/oomer/bellatui.git
+
 msbuild bellatui.vcxproj /p:Configuration=release /p:Platform=x64 /p:PlatformToolset=v143
+```
+
+Build directories be relative
+```
+--folder
+    --bella_engine_sdk
+    --bellatui
 ```
 
 # MacOS
@@ -191,8 +239,6 @@ make
 g++ -std=c++11 server.cpp -o server -I../libzmq/include -I../cppzmq -L../libzmq/build/lib -lzmq -Wl,-rpath,. 
 g++ -std=c++11 server.cpp -o server -I../libzmq/include -I../cppzmq -L../libzmq/build/lib -lzmq -Wl,-rpath,. 
 
-# Windows
-```
 cl /std:c++17 client.cpp -Fe:client.exe -Ic:\Users\cupcake\github\vcpkg\installed\x64-windows\include\ /link c:\Users\cupcake\github\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib
 
 cl /std:c++17 server.cpp -Fe:server.exe -Ic:\Users\cupcake\github\vcpkg\installed\x64-windows\include\ /link c:\Users\cupcake\github\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib
