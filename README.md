@@ -45,7 +45,7 @@ Client connected
 
 ## Precompile Binaries
 
-[Windows](https://a4g4.c14.e2-1.dev/bellatui/bellatui-win.zip)
+[Windows](https://a4g4.c14.e2-1.dev/bellatui/bellatui-windows.zip)
 
 [MacOS](https://a4g4.c14.e2-1.dev/bellatui/bellatui-mac.zip)
 ```
