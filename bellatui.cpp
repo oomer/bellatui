@@ -1,3 +1,19 @@
+/*
+ * BellaTUI - A Client-Server Rendering Application
+ * 
+ * This application provides a command-line interface for a rendering system called Bella.
+ * It consists of two main parts:
+ * 1. A server component that handles rendering operations
+ * 2. A client component that sends commands and files to the server
+ *
+ * The application uses ZeroMQ (ZMQ) for secure network communication between client and server.
+ * Key features:
+ * - Secure communication using CURVE encryption
+ * - File transfer capabilities (.bsz files)
+ * - Real-time rendering status updates
+ * - Heartbeat monitoring to check connection status
+ */
+
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -26,110 +42,158 @@
 using namespace dl;
 using namespace dl::bella_sdk;
 
+// Global state variables
+std::string initializeGlobalLicense();        // Function to return license text
+std::string initializeGlobalThirdPartyLicences(); // Function to return third-party licenses
+std::atomic<bool> connection_state (false);   // Tracks if client/server are connected
+std::atomic<bool> abort_state (false);        // Used to signal program termination
+std::atomic<bool> server (false);             // Indicates if running in server mode
 
-std::string initializeGlobalLicense();
-std::string initializeGlobalThirdPsrtyLicences();
-//std::atomic<bool> heartbeat_state (true);
-std::atomic<bool> connection_state (false);
-std::atomic<bool> abort_state (false);
-std::atomic<bool> server (false);
+// Function declarations
+std::string get_pubkey_from_srv(std::string server_address, uint16_t publickey_port);  // Gets server's public key for encryption
 
-
-std::string get_pubkey_from_srv(std::string server_address, uint16_t publickey_port);
-
+// Main client communication thread
 void client_thread( std::string server_pkey, 
                     std::string client_pkey, 
                     std::string client_skey,
                     std::string server_address,
                     uint16_t command_port); 
+
+// Main server thread that handles rendering and client requests
 void server_thread( std::string server_skey, 
                     uint16_t command_port,
                     bool test_render,
                     Engine engine);
 
+// Utility function to open files with system default program
 void openFileWithDefaultProgram(const std::string& filePath);
 
+// Helper function to check file extensions
 bool ends_with_suffix(const std::string& str, const std::string& suffix);
 
+// Server function to handle initial key exchange
 void pkey_server(const std::string& pub_key, uint16_t publickey_port);
 
+/*
+ * MyEngineObserver Class
+ * This class receives callbacks from the Bella rendering engine to track rendering progress.
+ * It implements the EngineObserver interface and provides methods to:
+ * - Handle render start/stop events
+ * - Track rendering progress
+ * - Handle error conditions
+ * - Store and retrieve the current progress state
+ */
 struct MyEngineObserver : public EngineObserver
 {
 public:
+    // Called when a rendering pass starts
     void onStarted(String pass) override
     {
         logInfo("Started pass %s", pass.buf());
     }
+
+    // Called to update the current status of rendering
     void onStatus(String pass, String status) override
     {
         logInfo("%s [%s]", status.buf(), pass.buf());
     }
+
+    // Called to update rendering progress (percentage, time remaining, etc)
     void onProgress(String pass, Progress progress) override
     {
         std::cout << progress.toString().buf() << std::endl;
         setString(new std::string(progress.toString().buf()));
         logInfo("%s [%s]", progress.toString().buf(), pass.buf());
     }
+
+    // Called when an error occurs during rendering
     void onError(String pass, String msg) override
     {
         logError("%s [%s]", msg.buf(), pass.buf());
     }
+
+    // Called when a rendering pass completes
     void onStopped(String pass) override
     {
         logInfo("Stopped %s", pass.buf());
     }
 
-    std::string getProgress() const {  // Add this function
+    // Returns the current progress as a string
+    std::string getProgress() const {
         std::string* currentProgress = progressPtr.load();
         if (currentProgress) {
-            return *currentProgress; // Return a copy of the string
+            return *currentProgress;
         } else {
-            return ""; // Or some default value if no progress yet
+            return "";
         }
     }
 
+    // Cleanup resources in destructor
     ~MyEngineObserver() {
         setString(nullptr);
     }
 private:
+    // Thread-safe pointer to current progress string
     std::atomic<std::string*> progressPtr{nullptr};
 
+    // Helper function to safely update the progress string
     void setString(std::string* newStatus) {
         std::string* oldStatus = progressPtr.exchange(newStatus);
-        delete oldStatus;
+        delete oldStatus;  // Clean up old string if it exists
     }
 };
 
-void heartbeat_thread(  std::string server_pkey, //CLIENT
-                        std::string server_skey, //SERVER
-                        std::string client_pkey, //CLIENT
-                        std::string client_skey, //CLIENT
-                        bool is_server,  //BOTH
-                        std::string server_address,  //CLIENT
-                        uint16_t heartbeat_port ) { //BOTH
+/*
+ * Heartbeat Monitoring System
+ * 
+ * This function implements a heartbeat mechanism to monitor the connection between client and server.
+ * It runs in a separate thread and:
+ * - For server: listens for periodic messages from client
+ * - For client: sends periodic messages to server
+ * If either side stops receiving messages, it marks the connection as dead.
+ *
+ * Parameters:
+ * - server_pkey: Server's public key (used by client)
+ * - server_skey: Server's secret key (used by server)
+ * - client_pkey: Client's public key (used by client)
+ * - client_skey: Client's secret key (used by client)
+ * - is_server: Boolean indicating if running in server mode
+ * - server_address: Address of the server (used by client)
+ * - heartbeat_port: Port number for heartbeat communication
+ */
+void heartbeat_thread(  std::string server_pkey, 
+                        std::string server_skey, 
+                        std::string client_pkey, 
+                        std::string client_skey, 
+                        bool is_server,  
+                        std::string server_address,  
+                        uint16_t heartbeat_port ) { 
 
-    zmq::context_t ctx;
-    zmq::socket_t heartbeat_sock; //top scope
+    zmq::context_t ctx;  // Create ZMQ context
+    zmq::socket_t heartbeat_sock; // Socket for heartbeat messages
 
     if(is_server) {
+        // Server mode: Listen for client heartbeats
         heartbeat_sock = zmq::socket_t(ctx, zmq::socket_type::rep);
         heartbeat_sock.set(zmq::sockopt::curve_server, true);
         heartbeat_sock.set(zmq::sockopt::curve_secretkey, server_skey);
         std::string url = "tcp://*:" + std::to_string(heartbeat_port);
         heartbeat_sock.bind(url);
+        
         while(true) {
-            //Start polling heartbeats once client connects
+            // Only check heartbeats when client is connected
             if (connection_state == true) {
+                // Wait up to 5 seconds for client heartbeat
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
-                zmq::poll(&response_item, 1, 5000); // Wait for response with timeout
+                zmq::poll(&response_item, 1, 5000);
 
-                if (response_item.revents & ZMQ_POLLIN) { //heartbeat
+                if (response_item.revents & ZMQ_POLLIN) {
+                    // Received heartbeat from client
                     zmq::message_t message;
-                    //ZIN<<<
                     heartbeat_sock.recv(message, zmq::recv_flags::none);
-                    //ZOUT>>>
-                    heartbeat_sock.send(zmq::message_t("ACK"), zmq::send_flags::dontwait); // No block
-                } else { //timeout
+                    heartbeat_sock.send(zmq::message_t("ACK"), zmq::send_flags::dontwait);
+                } else {
+                    // No heartbeat received - mark connection as dead
                     std::cout << "Bella Client Lost" << std::endl;
                     connection_state = false;
                 }
@@ -137,31 +201,38 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         } 
     } else {
+        // Client mode: Send heartbeats to server
         zmq::socket_t heartbeat_sock (ctx, zmq::socket_type::req);
+        // Set up encryption keys
         heartbeat_sock.set(zmq::sockopt::curve_serverkey, server_pkey);
         heartbeat_sock.set(zmq::sockopt::curve_publickey, client_pkey);
         heartbeat_sock.set(zmq::sockopt::curve_secretkey, client_skey);
-        heartbeat_sock.set(zmq::sockopt::linger, 1); // Close immediately on disconnect
-        std::string url = "tcp://" + server_address + ":" +std::to_string(heartbeat_port);
+        heartbeat_sock.set(zmq::sockopt::linger, 1);
+        
+        std::string url = "tcp://" + server_address + ":" + std::to_string(heartbeat_port);
         heartbeat_sock.connect(url);
-        //int heartbeat_count = 0;
-        //std::vector<zmq::pollitem_t> items = {};
+
         while (true) {
-            if(abort_state.load()==true) { // Check for other threads abort
+            // Check if we should stop
+            if(abort_state.load()==true) {
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
             if(connection_state == true) {
+                // Send heartbeat to server
                 heartbeat_sock.send(zmq::message_t("ACK"), zmq::send_flags::none);
-                // Wait for response (poll for ZMQ_POLLIN)
+                
+                // Wait for server response
                 zmq::pollitem_t response_item = { heartbeat_sock, 0, ZMQ_POLLIN, 0 };
-                zmq::poll(&response_item, 1, 5000); // Wait for response with timeout
+                zmq::poll(&response_item, 1, 5000);
+                
                 if (response_item.revents & ZMQ_POLLIN) {
+                    // Got response from server
                     zmq::message_t msg_response;
                     heartbeat_sock.recv(msg_response, zmq::recv_flags::none);
-                    //std::cout << "Heartbeat Response: " << std::endl;
                 } else {
+                    // No response - mark connection as dead
                     std::cout << "Bella Server is unavailable" << std::endl;
                     connection_state = false;
                     break;
@@ -169,36 +240,51 @@ void heartbeat_thread(  std::string server_pkey, //CLIENT
             }
         }
     }
+    // Clean up resources
     heartbeat_sock.close();
     ctx.close();
 }
 
-
-
-#include "dl_core/dl_main.inl"
+/*
+ * Main Program Entry Point
+ * 
+ * This function initializes the application and handles command-line arguments.
+ * It can run in either server or client mode:
+ * - Server mode: Starts rendering engine and waits for client connections
+ * - Client mode: Connects to server and sends commands
+ *
+ * Command-line arguments:
+ * --server        : Run in server mode
+ * --serverAddress : IP address of server (for client mode)
+ * --commandPort   : Port for main command communication
+ * --heartbeatPort : Port for connection monitoring
+ * --publickeyPort : Port for initial key exchange
+ * --testRender    : Use small resolution for testing
+ * --thirdparty    : Show third-party licenses
+ * --licenseinfo   : Show license information
+ */
+ #include "dl_core/dl_main.inl"
 int DL_main(Args& args)
 {
+    // Default configuration values
     const size_t chunk_size = 65536;
-
     std::string server_address = "localhost";
     uint16_t command_port = 5797;
     uint16_t heartbeat_port = 5798;
     uint16_t publickey_port = 5799;
     bool test_render = false;
-    /*logBanner("Bella Engine SDK (version: %s, build date: %llu)",
-        bellaSdkVersion().toString().buf(),
-        bellaSdkBuildDate()
-   );*/
 
+    // Register command-line arguments
     args.add("sa",  "serverAddress", "",   "Bella render server ip address");
     args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
-    args.add("hp",  "heartbeatPort",   "",   "tcp port for zmq server socket for heartbeats");
-    args.add("pp",  "publickeyPort",   "",   "tcp port for zmq server socket for server pubkey");
-    args.add("s",  "server",   "",   "turn on server mode");
-    args.add("tr",  "testRender",   "",   "force res to 100x100");
-    args.add("tp",  "thirdparty",   "",   "prints third party licenses");
+    args.add("hp",  "heartbeatPort", "",   "tcp port for zmq server socket for heartbeats");
+    args.add("pp",  "publickeyPort", "",   "tcp port for zmq server socket for server pubkey");
+    args.add("s",   "server",        "",   "turn on server mode");
+    args.add("tr",  "testRender",    "",   "force res to 100x100");
+    args.add("tp",  "thirdparty",    "",   "prints third party licenses");
     args.add("li",  "licenseinfo",   "",   "prints license info");
 
+    // Handle special command-line options
     if (args.versionReqested())
     {
         printf("%s", bellaSdkVersion().toString().buf());
@@ -211,37 +297,39 @@ int DL_main(Args& args)
         return 0;
     }
     
+    // Show license information if requested
     if (args.have("--licenseinfo"))
     {
         std::cout << initializeGlobalLicense() << std::endl;
         return 0;
     }
  
-
+    // Show third-party licenses if requested
     if (args.have("--thirdparty"))
     {
-        std::cout << initializeGlobalThirdPsrtyLicences() << std::endl;
+        std::cout << initializeGlobalThirdPartyLicences() << std::endl;
         return 0;
     }
  
-
-    // Turn on server mode
+    // Check if running in server mode
     if (args.have("--server"))
     {
         server=true;
     }
     
+    // Enable test rendering if requested
     if (args.have("--testRender"))
     {
         test_render=true;
     }
 
+    // Parse server address (for client mode)
     if (args.have("--serverAddress")) 
     {
-        //server_address = std::string(args.value("--serverAddress").buf());
         server_address = args.value("--serverAddress").buf();
     }
 
+    // Parse port numbers if provided
     if (args.have("--heartbeatPort")) 
     {
         String argString = args.value("--heartbeatPort");
@@ -877,7 +965,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.)"; }
 
-std::string initializeGlobalThirdPsrtyLicences() {
+std::string initializeGlobalThirdPartyLicences() {
 return R"(
 ====
 

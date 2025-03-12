@@ -33,7 +33,7 @@ stat
 Server response: Saturn | Elapsed: 41s | Progress: 22.65%
 ```
 
-## Precompile Binaries
+### Precompiled Binaries
 
 [Windows](https://a4g4.c14.e2-1.dev/bellatui/bellatui-windows.zip)
 
