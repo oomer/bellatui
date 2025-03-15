@@ -48,33 +48,55 @@ apt install -y libsodium-dev
 ```
 
 
-## Build 
-
-##MacOS
+# Build 
 ```
-mkdir ~/homebrew
-curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip-components 1 -C ~/homebrew
-eval "$(~/homebrew/bin/brew shellenv)"
-brew update --force --quiet
-chmod -R go-w "$(brew --prefix)/share/zsh"
+workdir/
+├── bella_engine_sdk/
+├── libzmq/
+├── cppzmq/
+├── belatui/
+
+( additional Windows package manager dependency )
+├── vcpkg/
+
+( additional MacOS package manager dependency )
+└── homebrew/
+```
+Download SDK for your OS and drag bella_engine_sdk into your workdir. On Windows rename unzipped folder by removing version ie bella_engine_sdk-24.6.0 -> bella_engine_sdk
+
+- [bella_engine_sdk MacOS](https://downloads.bellarender.com/bella_engine_sdk-24.6.0.dmg)
+- [bella_engine_sdk Linux](https://downloads.bellarender.com/bella_engine_sdk-24.6.0.tar.gz)
+- [bella_engine_sdk Win](https://downloads.bellarender.com/bella_engine_sdk-24.6.0.zip)
+
+
+## MacOS
+Install Cmake to /Applications
+```
 curl -LO https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-macos-universal.dmg
-open cmake-3.31.6-macos-universal.dmg 
+open cmake-3.31.6-macos-universal.dmg
+```
+Install Xcode
+
+```
+mkdir workdir/homebrew
+cd workdir
+curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip-components 1 -C homebrew
+eval "$(homebrew/bin/brew shellenv)"
+brew update --force --quiet
 brew install libsodium
-brew install gnutls
 brew install pkg-config
+cd ..
 git clone https://github.com/zeromq/libzmq
 cd libzmq
 mkdir build
 cd build
-/Applications/CMake.app/Contents/bin/cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=~/homebrew/Cellar/libsodium/1.0.20/include/sodium -DSODIUM_INCLUDE_DIRS=~/homebrew/Cellar/libsodium/1.0.20/include -DSODIUM_LIBRARIES=~/homebrew/Cellar/libsodium/1.0.20/lib/libsodium.a
+/Applications/CMake.app/Contents/bin/cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=../../homebrew/Cellar/libsodium/1.0.20/include/sodium -DSODIUM_INCLUDE_DIRS=~/homebrew/Cellar/libsodium/1.0.20/include -DSODIUM_LIBRARIES=~/homebrew/Cellar/libsodium/1.0.20/lib/libsodium.a
 make
 cd ../..
 git clone https://github.com/zeromq/cppzmq
-
 git clone https://github.com/oomer/bellatui.git
 cd bellatui
 make
-
 ```
 
 ## Linux
@@ -93,7 +115,6 @@ apt install  -y libgl1-mesa-dev
 apt install -y libtool
 apt install -y libsodium-dev
 apt install -y cmake
-apt install libgnutls28-dev 
 apt install pkg-config 
 ```
 
@@ -105,27 +126,20 @@ dnf install -y mesa-libGL-devel
 dnf install -y libtool
 dnf install -y libsodium-devel
 dnf install -y cmake
-dnf install -y gnutls-devel
 dnf install -y pkg-config
 ```
 
-### building libzmq
+### building libzmq cppzmq
 ```
+mkdir workdir
+cd workdir
 git clone https://github.com/zeromq/libzmq
 cd libzmq
 mkdir build
 cd build
-
-cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium
-
+//cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium
 cmake .. -DENABLE_DRAFTS=OFF -DWITH_TLS=OFF -DENABLE_CURVE=ON -DWITH_LIBSODIUM=/usr/include/sodium
-
 make -j4
-make install
-```
-
-### getting cppzmq headers
-```
 cd ../..
 git clone https://github.com/zeromq/cppzmq
 cd cppzmq
@@ -144,8 +158,7 @@ make
 
 # Windows
 https://aka.ms/vs/17/release/vs_BuildTools.exe
-
-[ ] Desktop development wiht C++
+[ ] Desktop development with C++
 
 Get bella_engine_sdk
 
