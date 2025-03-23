@@ -78,8 +78,9 @@ open cmake-3.31.6-macos-universal.dmg
 Install Xcode
 
 ```
-mkdir workdir/homebrew
+mkdir workdir
 cd workdir
+mkdir homebrew
 curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip-components 1 -C homebrew
 eval "$(homebrew/bin/brew shellenv)"
 brew update --force --quiet
@@ -91,12 +92,12 @@ cd libzmq
 mkdir build
 cd build
 /Applications/CMake.app/Contents/bin/cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=../../homebrew/Cellar/libsodium/1.0.20/include/sodium -DSODIUM_INCLUDE_DIRS=~/homebrew/Cellar/libsodium/1.0.20/include -DSODIUM_LIBRARIES=~/homebrew/Cellar/libsodium/1.0.20/lib/libsodium.a
-make
+make -j4
 cd ../..
 git clone https://github.com/zeromq/cppzmq
 git clone https://github.com/oomer/bellatui.git
 cd bellatui
-make
+make -j4
 ```
 
 ## Linux
@@ -127,6 +128,11 @@ dnf install -y libtool
 dnf install -y libsodium-devel
 dnf install -y cmake
 dnf install -y pkg-config
+```
+
+[todo] makefile needs this path for redhat
+```
+      SODDIR          = /usr/lib64/
 ```
 
 ### building libzmq cppzmq
