@@ -238,7 +238,7 @@ std::string initializeGlobalLicense();        // Function to return license text
 std::string initializeGlobalThirdPartyLicences(); // Function to return third-party licenses
 std::atomic<bool> connection_state (false);   // Tracks if client/server are connected
 std::atomic<bool> abort_state (false);        // Used to signal program termination
-std::atomic<bool> server (false);             // Indicates if running in server mode
+std::atomic<bool> server (true);             // Indicates if running in server mode
 UpdateListener* global_ul = nullptr;          // Global pointer to UpdateListener
 
 // Function declarations
@@ -582,7 +582,7 @@ int DL_main(Args& args)
     args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
     args.add("hp",  "heartbeatPort", "",   "tcp port for zmq server socket for heartbeats");
     args.add("pp",  "publickeyPort", "",   "tcp port for zmq server socket for server pubkey");
-    args.add("s",   "server",        "",   "turn on server mode");
+    args.add("c",   "client",        "",   "turn on client mode");
     args.add("tr",  "testRender",    "",   "force res to 100x100");
     args.add("tp",  "thirdparty",    "",   "prints third party licenses");
     args.add("li",  "licenseinfo",   "",   "prints license info");
@@ -614,27 +614,6 @@ int DL_main(Args& args)
     // Don't wait for the thread to finish here, let it run in background
     watcher_thread.detach();
     
-    /*if (args.have("--efswxxxxx"))
-    {
-        std::cout << "EFSW mode" << std::endl;
-        signal( SIGABRT, sigend );
-        signal( SIGINT, sigend );
-        signal( SIGTERM, sigend );
-
-        //std::cout << "Press ^C to exit demo" << std::endl;
-
-        std::string path;
-        if (args.have("--watchdir")) {
-            path = args.value("--watchdir").buf();
-        }
-
-        // Create the file watcher thread
-        std::thread watcher_thread(file_watcher_thread, path);
-        
-        // Don't wait for the thread to finish here, let it run in background
-        watcher_thread.detach();
-    }*/
-    
     // Show license information if requested
     if (args.have("--licenseinfo"))
     {
@@ -650,9 +629,9 @@ int DL_main(Args& args)
     }
  
     // Check if running in server mode
-    if (args.have("--server"))
+    if (args.have("--client"))
     {
-        server=true;
+        server=false;
     }
     
     // Enable test rendering if requested
@@ -665,6 +644,7 @@ int DL_main(Args& args)
     if (args.have("--serverAddress")) 
     {
         server_address = args.value("--serverAddress").buf();
+        server=false;
     }
 
     // Parse port numbers if provided
@@ -1259,12 +1239,12 @@ void render_thread( Engine& engine,
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         } else { // someone else is rendering
-            std::cout << "Waiting for render slot" << std::endl;
+            //std::cout << "Waiting for render slot" << std::endl;
 
             //std::cout << "Render Queue size: " << renderThreadQueue.size() << std::endl;
             //std::cout << "Delete Queue size: " << renderThreadDeleteQueue.size() << std::endl;
             while (renderThreadDeleteQueue.pop(belPath)) { // pop all the deletes
-                std::cout << "renderThreadDeleteQueue contains " << belPath.buf() << " " << renderThreadDeleteQueue.contains(belPath) << std::endl;
+                //std::cout << "renderThreadDeleteQueue contains " << belPath.buf() << " " << renderThreadDeleteQueue.contains(belPath) << std::endl;
                 if (belPath == currentRender) {
                     std::cout << "/n==/nStopping render" << belPath.buf() << std::endl;
                     engine.stop();
