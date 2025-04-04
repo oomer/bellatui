@@ -37,10 +37,198 @@
 #include <sys/wait.h> // For waitpid
 #endif
 
-#include "bella_sdk/bella_engine.h"
-#include "dl_core/dl_fs.h"
+#include <efsw/FileSystem.hpp> // For file watching
+#include <efsw/System.hpp> // For file watching
+#include <efsw/efsw.hpp> // For file watching
+#include <iostream>
+#include <signal.h>
+
+
+#include "../bella_engine_sdk/src/bella_sdk/bella_engine.h" // For rendering
+#include "../bella_engine_sdk/src/dl_core/dl_fs.h" // For rendering
 using namespace dl;
 using namespace dl::bella_sdk;
+
+/// A class that manages a queue of files to render with both FIFO order and fast lookups
+class RenderQueue {
+public:
+    // Default constructor
+    RenderQueue() = default;
+
+    // Move constructor
+    RenderQueue(RenderQueue&& other) noexcept {
+        std::lock_guard<std::mutex> lock(other.mutex);
+        pathVector = std::move(other.pathVector);
+        pathMap = std::move(other.pathMap);
+    }
+
+    // Move assignment operator
+    RenderQueue& operator=(RenderQueue&& other) noexcept {
+        if (this != &other) {
+            std::lock_guard<std::mutex> lock1(mutex);
+            std::lock_guard<std::mutex> lock2(other.mutex);
+            pathVector = std::move(other.pathVector);
+            pathMap = std::move(other.pathMap);
+        }
+        return *this;
+    }
+
+    // Delete copy operations since mutexes can't be copied
+    RenderQueue(const RenderQueue&) = delete;
+    RenderQueue& operator=(const RenderQueue&) = delete;
+
+    // Add a file to the queue if it's not already there
+    bool push(const dl::String& path) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (pathMap.find(path) == pathMap.end()) {
+            pathVector.push_back(path);
+            pathMap[path] = true;
+            return true;
+        }
+        return false;
+    }
+
+    // Get the next file to render (FIFO order)
+    bool pop(dl::String& outPath) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!pathVector.empty()) {
+            outPath = pathVector.front();
+            pathVector.erase(pathVector.begin());
+            pathMap.erase(outPath);
+            return true;
+        }
+        return false;
+    }
+
+    // Remove a specific file by name
+    bool remove(const dl::String& path) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (pathMap.find(path) != pathMap.end()) {
+            // Remove from vector using erase-remove idiom
+            pathVector.erase(
+                std::remove(pathVector.begin(), pathVector.end(), path),
+                pathVector.end()
+            );
+            // Remove from map
+            pathMap.erase(path);
+            return true;
+        }
+        return false;
+    }
+
+    // Check if a file exists in the queue
+    bool contains(const dl::String& path) const {
+        std::lock_guard<std::mutex> lock(mutex);
+        return pathMap.find(path) != pathMap.end();
+    }
+
+    // Get the number of files in the queue
+    size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex);
+        return pathVector.size();
+    }
+
+    // Check if the queue is empty
+    bool empty() const {
+        std::lock_guard<std::mutex> lock(mutex);
+        return pathVector.empty();
+    }
+
+    // Clear all files from the queue
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex);
+        pathVector.clear();
+        pathMap.clear();
+    }
+
+private:
+    std::vector<dl::String> pathVector;  // Maintains FIFO order
+    std::map<dl::String, bool> pathMap;  // Enables fast lookups
+    mutable std::mutex mutex;            // Thread safety
+};
+
+std::atomic<bool> active_render(false);
+RenderQueue renderQueue;  // Replace the old vector and map with our new class
+std::mutex renderQueueMutex;  // Add mutex for thread safety
+std::vector<dl::String> renderDelete; // This is the efsw queue for when we delete a file
+std::mutex renderDeleteMutex;  // Add mutex for thread safety
+
+dl::String currentRender;
+std::mutex currentRenderMutex;  // Add mutex for thread safety
+
+// Queues for incoming files from the efsw watcher
+RenderQueue incomingDeleteQueue;  
+RenderQueue incomingRenderQueue;  
+std::mutex incomingDeleteQueueMutex;  // Add mutex for thread safety
+std::mutex incomingRenderQueueMutex;  // Add mutex for thread safety
+
+
+/// Processes a file action
+class UpdateListener : public efsw::FileWatchListener {
+  public:
+	UpdateListener() : should_stop_(false) {}
+
+	void stop() {
+		should_stop_ = true;
+	}
+
+	std::string getActionName( efsw::Action action ) {
+		switch ( action ) {
+			case efsw::Actions::Add:
+				return "Add";
+			case efsw::Actions::Modified:
+				return "Modified";
+			case efsw::Actions::Delete:
+				return "Delete";
+			case efsw::Actions::Moved:
+				return "Moved";
+			default:
+				return "Bad Action";
+		}
+	}
+
+	void handleFileAction( efsw::WatchID watchid, const std::string& dir,
+						   const std::string& filename, efsw::Action action,
+						   std::string oldFilename = "" ) override {
+		if (should_stop_) return;  // Early exit if we're stopping
+		
+		std::string actionName = getActionName( action ); 
+		/*std::cout << "Watch ID " << watchid << " DIR ("
+				  << dir + ") FILE (" +
+						 ( oldFilename.empty() ? "" : "from file " + oldFilename + " to " ) +
+						 filename + ") has event "
+				  << actionName << std::endl;*/
+		if (actionName == "Delete") {
+            if (active_render || !incomingRenderQueue.empty()) { 
+                dl::String belPath = (dir +  filename).c_str();
+                if (belPath.endsWith(".bsz")) {
+                    {
+                        std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
+                        if (!incomingDeleteQueue.contains(belPath)) {
+                            incomingDeleteQueue.push(belPath);
+                            std::cout << "\n==" << "STOP RENDER: " << belPath.buf() << "\n==" << std::endl;
+                        }
+                    }
+                }
+            }
+		}
+		if (actionName == "Add" || actionName == "Modified") {
+			dl::String belPath = (dir + filename).c_str();
+			if (should_stop_) return;  // Check again before starting render
+			if (belPath.endsWith(".bsz")) {
+                {
+                    std::lock_guard<std::mutex> lock(incomingRenderQueueMutex);
+                    if (!incomingRenderQueue.contains(belPath)) {
+                        incomingRenderQueue.push(belPath);
+                        std::cout << "\n==" << "RENDER QUEUED: " << belPath.buf() << "\n==" << std::endl;
+                    }
+                }
+			}
+		}
+	}
+  private:
+	std::atomic<bool> should_stop_; // ctrl-c was not working, so we use this to stop the thread
+};
 
 // Global state variables
 std::string initializeGlobalLicense();        // Function to return license text
@@ -48,9 +236,63 @@ std::string initializeGlobalThirdPartyLicences(); // Function to return third-pa
 std::atomic<bool> connection_state (false);   // Tracks if client/server are connected
 std::atomic<bool> abort_state (false);        // Used to signal program termination
 std::atomic<bool> server (false);             // Indicates if running in server mode
+UpdateListener* global_ul = nullptr;          // Global pointer to UpdateListener
 
 // Function declarations
 std::string get_pubkey_from_srv(std::string server_address, uint16_t publickey_port);  // Gets server's public key for encryption
+
+
+bool STOP = false;
+
+void sigend( int ) {
+	std::cout << std::endl << "Bye bye" << std::endl;
+	STOP = true;
+	if (global_ul) {  // Use the global pointer
+		global_ul->stop();
+	}
+	// Give a short time for cleanup
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	exit(0);  // Force exit after cleanup
+}
+
+efsw::WatchID handleWatchID( efsw::WatchID watchid ) {
+	switch ( watchid ) {
+		case efsw::Errors::FileNotFound:
+		case efsw::Errors::FileRepeated:
+		case efsw::Errors::FileOutOfScope:
+		case efsw::Errors::FileRemote:
+		case efsw::Errors::WatcherFailed:
+		case efsw::Errors::Unspecified: {
+			std::cout << efsw::Errors::Log::getLastErrorLog().c_str() << std::endl;
+			break;
+		}
+		default: {
+			std::cout << "Added WatchID: " << watchid << std::endl;
+		}
+	}
+	return watchid;
+}
+
+
+static int s_logCtx = 0;
+static void log(void* /*ctx*/, LogType type, const char* msg)
+{
+    switch (type)
+    {
+    case LogType_Info:
+        DL_PRINT("[INFO] %s\n", msg);
+        break;
+    case LogType_Warning:
+        DL_PRINT("[WARN] %s\n", msg);
+        break;
+    case LogType_Error:
+        DL_PRINT("[ERROR] %s\n", msg);
+        break;
+    case LogType_Custom:
+        DL_PRINT("%s\n", msg);
+        break;
+    }
+}
 
 // Main client communication thread
 void client_thread( std::string server_pkey, 
@@ -58,12 +300,6 @@ void client_thread( std::string server_pkey,
                     std::string client_skey,
                     std::string server_address,
                     uint16_t command_port); 
-
-// Main server thread that handles rendering and client requests
-void server_thread( std::string server_skey, 
-                    uint16_t command_port,
-                    bool test_render,
-                    Engine engine);
 
 // Utility function to open files with system default program
 void openFileWithDefaultProgram(const std::string& filePath);
@@ -89,14 +325,15 @@ public:
     // Called when a rendering pass starts
     void onStarted(String pass) override
     {
+        std::cout << "Started pass " << pass.buf() << std::endl;
         logInfo("Started pass %s", pass.buf());
     }
 
     // Called to update the current status of rendering
-    void onStatus(String pass, String status) override
-    {
-        logInfo("%s [%s]", status.buf(), pass.buf());
-    }
+    //void onStatus(String pass, String status) override
+    //{
+    //    logInfo("%s [%s]", status.buf(), pass.buf());
+    //}
 
     // Called to update rendering progress (percentage, time remaining, etc)
     void onProgress(String pass, Progress progress) override
@@ -105,6 +342,11 @@ public:
         setString(new std::string(progress.toString().buf()));
         logInfo("%s [%s]", progress.toString().buf(), pass.buf());
     }
+
+    void onImage(String pass, Image image) override
+    {
+        logInfo("We got an image %d x %d.", (int)image.width(), (int)image.height());
+    }  
 
     // Called when an error occurs during rendering
     void onError(String pass, String msg) override
@@ -116,6 +358,7 @@ public:
     void onStopped(String pass) override
     {
         logInfo("Stopped %s", pass.buf());
+        active_render = false;
     }
 
     // Returns the current progress as a string
@@ -142,6 +385,16 @@ private:
         delete oldStatus;  // Clean up old string if it exists
     }
 };
+
+// Main server thread that handles client requests
+void server_thread(     std::string server_skey, 
+                        uint16_t command_port,
+                        bool test_render,
+                        Engine& engine,
+                        MyEngineObserver& engineObserver);
+
+void render_thread( Engine& engine,
+                    MyEngineObserver& engineObserver);
 
 /*
  * Heartbeat Monitoring System
@@ -245,6 +498,41 @@ void heartbeat_thread(  std::string server_pkey,
     ctx.close();
 }
 
+void file_watcher_thread(const std::string& watch_path = "") {
+    bool commonTest = true;
+    bool useGeneric = false;
+    
+    global_ul = new UpdateListener();
+    efsw::FileWatcher fileWatcher(useGeneric);
+
+    fileWatcher.followSymlinks(false);
+    fileWatcher.allowOutOfScopeLinks(false);
+
+    if (!watch_path.empty() && dl::fs::exists(watch_path.data())) {
+        commonTest = false;
+        if (fileWatcher.addWatch(watch_path, global_ul, true) > 0) {
+            fileWatcher.watch();
+            std::cout << "Watching directory: " << watch_path << std::endl;
+        } else {
+            std::cout << "Error trying to watch directory: " << watch_path << std::endl;
+            std::cout << efsw::Errors::Log::getLastErrorLog().c_str() << std::endl;
+            return;
+        }
+    } else if (commonTest) {
+        std::string CurPath(efsw::System::getProcessPath());
+        std::cout << "CurPath: " << CurPath.c_str() << std::endl;
+        fileWatcher.watch();
+        handleWatchID(fileWatcher.addWatch(CurPath + "test", global_ul, true));
+    }
+
+    while(STOP == false) {
+        efsw::System::sleep(500);
+    }
+
+    delete global_ul;
+    global_ul = nullptr;
+}
+
 /*
  * Main Program Entry Point
  * 
@@ -274,6 +562,18 @@ int DL_main(Args& args)
     uint16_t publickey_port = 5799;
     bool test_render = false;
 
+    Engine engine;
+    engine.scene().loadDefs();
+    MyEngineObserver engineObserver;
+    engine.subscribe(&engineObserver);
+
+    // Very early on, we will subscribe to the global bella logging callback, and ask to flush
+    // any messages that may have accumulated prior to this point.
+    //
+    subscribeLog(&s_logCtx, log);
+    flushStartupMessages();
+
+
     // Register command-line arguments
     args.add("sa",  "serverAddress", "",   "Bella render server ip address");
     args.add("cp",  "commandPort",   "",   "tcp port for zmq server socket for commands");
@@ -283,6 +583,8 @@ int DL_main(Args& args)
     args.add("tr",  "testRender",    "",   "force res to 100x100");
     args.add("tp",  "thirdparty",    "",   "prints third party licenses");
     args.add("li",  "licenseinfo",   "",   "prints license info");
+    args.add("ef",  "efsw",   "",   "mode efsw");
+    args.add("wd",  "watchdir",   "",   "mode file warch");
 
     // Handle special command-line options
     if (args.versionReqested())
@@ -296,6 +598,39 @@ int DL_main(Args& args)
         printf("%s", args.help("SDK Test", fs::exePath(), bellaSdkVersion().toString()).buf());
         return 0;
     }
+    std::string path=".";
+
+    if (args.have("--watchdir")) {
+        path = args.value("--watchdir").buf();
+    }
+
+
+    //EFSW mode alwys on
+    // Create the file watcher thread
+    std::thread watcher_thread(file_watcher_thread, path);
+    // Don't wait for the thread to finish here, let it run in background
+    watcher_thread.detach();
+    
+    /*if (args.have("--efswxxxxx"))
+    {
+        std::cout << "EFSW mode" << std::endl;
+        signal( SIGABRT, sigend );
+        signal( SIGINT, sigend );
+        signal( SIGTERM, sigend );
+
+        //std::cout << "Press ^C to exit demo" << std::endl;
+
+        std::string path;
+        if (args.have("--watchdir")) {
+            path = args.value("--watchdir").buf();
+        }
+
+        // Create the file watcher thread
+        std::thread watcher_thread(file_watcher_thread, path);
+        
+        // Don't wait for the thread to finish here, let it run in background
+        watcher_thread.detach();
+    }*/
     
     // Show license information if requested
     if (args.have("--licenseinfo"))
@@ -364,9 +699,6 @@ int DL_main(Args& args)
     }
 
 
-    Engine engine;
-    engine.scene().loadDefs();
-
     // Generate brand new keypair on launch
     // [TODO] Add client side public key fingerprinting for added security
     if(server.load()) {
@@ -378,7 +710,8 @@ int DL_main(Args& args)
             std::cout << "\ncurve keypair gen failed.";
             exit(EXIT_FAILURE);
         }
-        std::thread server_t(server_thread, server_skey, command_port, test_render, engine);
+        std::thread server_t(server_thread, server_skey, command_port, test_render, std::ref(engine), std::ref(engineObserver));
+        std::thread render_t(render_thread, std::ref(engine), std::ref(engineObserver));
         ///std::thread heartbeat_t(heartbeat_thread, server_skey, server.load(), 5555);
         std::thread heartbeat_t(heartbeat_thread,   //function
                                 "",                 //NA Public server key 
@@ -397,7 +730,7 @@ int DL_main(Args& args)
 
             while(true) { // inner loop
                 if (connection_state.load()==false) { 
-                    std::cout << "Client connectiono dead" << std::endl;
+                    std::cout << "Client connection dead" << std::endl;
                     break; // Go back to awaiting client
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -595,6 +928,16 @@ void client_thread( std::string server_pkey,
                 exit(0);
             // RENDER
             } else if(command == "render") {
+                std::string compoundArg;
+                if(num_args > 1) {
+                    for (size_t i = 1; i < args.size(); ++i) {
+                        compoundArg += args[i];
+                        if (i < args.size() - 1) {
+                            compoundArg += " "; // Add spaces between arguments
+                        }
+                    }
+                    std::cout << compoundArg << std::endl;
+                }
                 //>>>ZOUT
                 command_sock.send(zmq::message_t("render"), zmq::send_flags::none);
                 //ZIN<<<
@@ -694,9 +1037,10 @@ void client_thread( std::string server_pkey,
 void server_thread(     std::string server_skey, 
                         uint16_t command_port,
                         bool test_render,
-                        Engine engine) {
-    MyEngineObserver engineObserver;
-    engine.subscribe(&engineObserver);
+                        Engine& engine,
+                        MyEngineObserver& engineObserver) {
+    //MyEngineObserver engineObserver;
+    //engine.subscribe(&engineObserver);
 
     zmq::context_t ctx;
     zmq::socket_t command_sock(ctx, zmq::socket_type::rep);  
@@ -733,12 +1077,9 @@ void server_thread(     std::string server_skey,
                 command_sock.send(zmq::message_t("RDY"), zmq::send_flags::none); 
                 connection_state = false; //<<
             // RENDER
-            } else if (client_command == "render") {
+            } else if (client_command == "xxxxrender") {
                 std::cout << "start render" << std::endl;
-                if(test_render) {
-                    engine.scene().camera()["resolution"]= Vec2 {100, 100};
-                }
-                engine.start();
+
                 //>>>ZOUT
                 command_sock.send(zmq::message_t("render started...type stat to get progress"), zmq::send_flags::none); 
             } else if (client_command == "stop") {
@@ -834,6 +1175,9 @@ void server_thread(     std::string server_skey,
                 //>>ZOUT
                 command_sock.send(zmq::message_t("ACK"), zmq::send_flags::none); 
             }
+
+
+
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
@@ -852,6 +1196,85 @@ void server_thread(     std::string server_skey,
     }
     command_sock.close();
     ctx.close();
+}
+
+void render_thread( Engine& engine,
+                    MyEngineObserver& engineObserver) {
+    // Create persistent instances outside the loop
+    RenderQueue renderThreadQueue;
+    RenderQueue renderThreadDeleteQueue;
+
+    while (true) {
+        // Append items from incoming queues to our persistent queues
+        {
+            std::lock_guard<std::mutex> lock(incomingRenderQueueMutex);
+            // Process each item in the incoming queue and add it to our persistent queue
+            dl::String path;
+            while (incomingRenderQueue.pop(path)) {
+                renderThreadQueue.push(path);
+            }
+            incomingRenderQueue.clear();
+        }
+        
+        {
+            std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
+            // Process each item in the incoming queue and add it to our persistent queue
+            dl::String path;
+            while (incomingDeleteQueue.pop(path)) {
+                renderThreadDeleteQueue.push(path);
+            }
+            incomingDeleteQueue.clear();
+        }
+
+        // Process the files without holding the mutex
+        bool expected = false;
+        
+        // This is an atomic operation that does two things at once:
+        // 1. Checks if active_render equals expected (false)
+        // 2. If they are equal, sets active_render to true
+        // 
+        // The operation is atomic, meaning no other thread can interfere
+        // between the check and the set. This prevents two threads from
+        // both thinking they can start rendering at the same time.
+        //
+        // Returns true if the exchange was successful (we got the render slot)
+        // Returns false if active_render was already true (someone else is rendering)
+        dl::String belPath;
+        if (active_render.compare_exchange_strong(expected, true)) {
+            // We successfully got the render slot - no one else is rendering
+            if (renderThreadQueue.pop(belPath)) {
+                std::cout << "\n==" << "RENDERING: " << belPath.buf() << "\n==" << std::endl;
+                engine.loadScene(belPath);
+                engine.scene().camera()["resolution"]= Vec2 {100, 100};
+                engine.start();
+                {
+                    std::lock_guard<std::mutex> lock(currentRenderMutex);
+                    currentRender = belPath; 
+                }
+            } else {
+                active_render = false;  // Release the render slot
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        } else { // someone else is rendering
+            std::cout << "Waiting for render slot" << std::endl;
+
+            //std::cout << "Render Queue size: " << renderThreadQueue.size() << std::endl;
+            //std::cout << "Delete Queue size: " << renderThreadDeleteQueue.size() << std::endl;
+            while (renderThreadDeleteQueue.pop(belPath)) { // pop all the deletes
+                std::cout << "renderThreadDeleteQueue contains " << belPath.buf() << " " << renderThreadDeleteQueue.contains(belPath) << std::endl;
+                if (belPath == currentRender) {
+                    std::cout << "/n==/nStopping render" << belPath.buf() << std::endl;
+                    engine.stop();
+                    active_render = false;
+                } else if (renderThreadQueue.contains(belPath)) { // dequeue deletes
+                    renderThreadQueue.remove(belPath);
+                } 
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 }
 
 

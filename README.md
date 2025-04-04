@@ -1,6 +1,6 @@
 # bellatui
 
-Command line bella renderer with encrypted networking and text user interface.
+Command line bella renderer with encrypted networking ,text user interface and file monitoring.
 
 ## Usage
 
@@ -54,6 +54,7 @@ workdir/
 ├── bella_engine_sdk/
 ├── libzmq/
 ├── cppzmq/
+├── efsw/
 ├── belatui/
 
 ( additional Windows package manager dependency )
@@ -95,9 +96,14 @@ cd build
 make -j4
 cd ../..
 git clone https://github.com/zeromq/cppzmq
+git clone https://github.com/SpartanJ/efsw.git
+mkdir -p efsw/build
+cd efsw/build
+/Applications/CMake.app/Contents/bin/cmake ..
+cd ../..
 git clone https://github.com/oomer/bellatui.git
 cd bellatui
-make -j4
+make all -j4
 ```
 
 ## Linux
@@ -151,7 +157,13 @@ git clone https://github.com/zeromq/cppzmq
 cd cppzmq
 mkdir build
 cd build
-cmake .. 
+cmake ..
+cd ../..
+git clone https://github.com/SpartanJ/efsw.git
+mkdir -p efsw/build
+cd efsw/build
+cmake ..
+make -j4
 ```
 
 ### compiling bellatui
@@ -159,7 +171,7 @@ cmake ..
 cd ../..
 git clone https://github.com/oomer/bellatui.git
 cd bellatui
-make
+make all -j4
 ```
 
 # Windows
@@ -173,18 +185,17 @@ Get bella_engine_sdk
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 vcpkg install zeromq[sodium]:x64-windows 
+cd ..
+git clone https://github.com/SpartanJ/efsw.git
+mkdir -p efsw/build
+cd efsw/build
+cmake ..
 
 git clone https://github.com/oomer/bellatui.git
 
 msbuild bellatui.vcxproj /p:Configuration=release /p:Platform=x64 /p:PlatformToolset=v143
 ```
 
-Build directories expected to be relative
-```
---folder
-    --bella_engine_sdk
-    --bellatui
-```
 
 
 
