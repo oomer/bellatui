@@ -1248,7 +1248,7 @@ void render_thread( Engine& engine,
             if (renderThreadQueue.pop(belPath)) {
                 std::cout << "\n==" << "RENDERING: " << belPath.buf() << "\n==" << std::endl;
                 engine.loadScene(belPath);
-                engine.scene().camera()["resolution"]= Vec2 {100, 100};
+                //engine.scene().camera()["resolution"]= Vec2 {100, 100};
                 engine.start();
                 {
                     std::lock_guard<std::mutex> lock(currentRenderMutex);
