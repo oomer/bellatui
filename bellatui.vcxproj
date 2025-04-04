@@ -19,13 +19,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='PseudoDebug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -47,13 +47,13 @@
       <PreprocessorDefinitions>PSEUDODEBUG;_CONSOLE;DL_USE_SHARED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>..\bella_engine_sdk\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\bella_engine_sdk\src;..\efsw\include;..\efsw\src;..\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>bella_engine_sdk.lib;Shlwapi.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>lib;..\efsw\build\Debug;..\vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>efsw-static.lib;libzmq-mt-4_3_5.lib;bella_engine_sdk.lib;Shlwapi.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <DelayLoadDLLs>vulkan-1.dll</DelayLoadDLLs>
     </Link>
   </ItemDefinitionGroup>
@@ -64,17 +64,15 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;DL_USE_SHARED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\bella_engine_sdk\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\bella_engine_sdk\src;..\efsw\include;..\efsw\src;..\vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>lib</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories>../vcpkg/installed/x64-windows/lib</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories>../bella_engine_sdk/lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libzmq-mt-4_3_5.lib;bella_engine_sdk.lib;Shlwapi.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>lib;..\efsw\build\Release;..\vcpkg\installed\x64-windows\lib;..\bella_engine_sdk\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>efsw-static.lib;libzmq-mt-4_3_5.lib;bella_engine_sdk.lib;Shlwapi.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <DelayLoadDLLs>vulkan-1.dll</DelayLoadDLLs>
     </Link>
   </ItemDefinitionGroup>
@@ -91,19 +89,18 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <PostBuildEvent>
-      <Command>echo Post-build event started &amp; 
-      copy "$(ProjectDir)..\bella_engine_sdk\lib\bella_engine_sdk.dll" "$(TargetDir)" &amp; 
-      echo bella_engine_sdk.dll copied &amp; 
-      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_core.dll" "$(TargetDir)" &amp; 
-      echo dl_core.dll copied &amp; 
-      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_oidn_core.dll" "$(TargetDir)" &amp; 
-      echo dl_oidn_core.dll copied &amp; 
+      <Command>echo Post-build event started &amp;
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\bella_engine_sdk.dll" "$(TargetDir)" &amp;
+      echo bella_engine_sdk.dll copied &amp;
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_core.dll" "$(TargetDir)" &amp;
+      echo dl_core.dll copied &amp;
+      copy "$(ProjectDir)..\bella_engine_sdk\lib\dl_oidn_core.dll" "$(TargetDir)" &amp;
+      echo dl_oidn_core.dll copied &amp;
       copy "$(ProjectDir)..\vcpkg\installed\x64-windows\bin\libzmq-mt-4_3_5.dll" "$(TargetDir)" &amp;
-      echo libzmq-mt-4_3_5.dll copied &amp; 
-      copy "$(ProjectDir)..\vcpkg\installed\x64-windows\bin\libsodium.dll" "$(TargetDir)" &amp; 
-      echo libsodium.dll copied &amp; 
+      echo libzmq-mt-4_3_5.dll copied &amp;
+      copy "$(ProjectDir)..\vcpkg\installed\x64-windows\bin\libsodium.dll" "$(TargetDir)" &amp;
+      echo libsodium.dll copied &amp;
       echo Post-build event finished</Command>
-
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

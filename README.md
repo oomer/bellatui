@@ -89,9 +89,8 @@ brew install libsodium
 brew install pkg-config
 cd ..
 git clone https://github.com/zeromq/libzmq
-cd libzmq
-mkdir build
-cd build
+mkdir -p libzmq/build
+cd libzmq/build
 /Applications/CMake.app/Contents/bin/cmake .. -DENABLE_CURVE=ON -DWITH_LIBSODIUM=../../homebrew/Cellar/libsodium/1.0.20/include/sodium -DSODIUM_INCLUDE_DIRS=~/homebrew/Cellar/libsodium/1.0.20/include -DSODIUM_LIBRARIES=~/homebrew/Cellar/libsodium/1.0.20/lib/libsodium.a
 make -j4
 cd ../..
@@ -100,6 +99,7 @@ git clone https://github.com/SpartanJ/efsw.git
 mkdir -p efsw/build
 cd efsw/build
 /Applications/CMake.app/Contents/bin/cmake ..
+make -j4
 cd ../..
 git clone https://github.com/oomer/bellatui.git
 cd bellatui
@@ -160,6 +160,7 @@ cd build
 cmake ..
 cd ../..
 git clone https://github.com/SpartanJ/efsw.git
+
 mkdir -p efsw/build
 cd efsw/build
 cmake ..
@@ -184,13 +185,17 @@ Get bella_engine_sdk
 ```
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
+bootstrap-vcpkg.bat
 vcpkg install zeromq[sodium]:x64-windows 
+vcpkg.exe install cppzmq:x64-windows
+vcpkg integrate install
 cd ..
 git clone https://github.com/SpartanJ/efsw.git
 mkdir -p efsw/build
 cd efsw/build
 cmake ..
-
+msbuild efsw.sln /p:Configuration=Release /p:Platform=x64
+cd ../..
 git clone https://github.com/oomer/bellatui.git
 
 msbuild bellatui.vcxproj /p:Configuration=release /p:Platform=x64 /p:PlatformToolset=v143

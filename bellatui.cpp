@@ -24,6 +24,9 @@
 #include <string>
 #include <sstream> // For string streams
 #include <atomic>
+#include <mutex> // Add this line for std::mutex and std::lock_guard
+#include <map> // Add this line for std::map
+
 
 #include <cstdlib> // For std::system
 #include <stdexcept> // For std::runtime_error
