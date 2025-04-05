@@ -20,6 +20,8 @@
 #include <zmq.hpp>
 #include <vector>
 #include <chrono>
+#include <filesystem>
+#include <cstdio>  // For sprintf
 
 #include <string>
 #include <sstream> // For string streams
@@ -51,6 +53,10 @@
 #include "../bella_engine_sdk/src/dl_core/dl_fs.h" // For rendering
 using namespace dl;
 using namespace dl::bella_sdk;
+
+//Forward declarations
+std::string bellaSliderPreviewsHTML(); 
+//dl::Mat4 oomer_orbit(dl::Mat4 beginCamXform, int currentFrame, int totalFrames);
 
 /// A class that manages a queue of files to render with both FIFO order and fast lookups
 class RenderQueue {
@@ -151,10 +157,10 @@ private:
 };
 
 std::atomic<bool> active_render(false);
-RenderQueue renderQueue;  // Replace the old vector and map with our new class
-std::mutex renderQueueMutex;  // Add mutex for thread safety
-std::vector<dl::String> renderDelete; // This is the efsw queue for when we delete a file
-std::mutex renderDeleteMutex;  // Add mutex for thread safety
+//RenderQueue renderQueue;  // Replace the old vector and map with our new class
+//std::mutex renderQueueMutex;  // Add mutex for thread safety
+//std::vector<dl::String> renderDelete; // This is the efsw queue for when we delete a file
+//std::mutex renderDeleteMutex;  // Add mutex for thread safety
 
 dl::String currentRender;
 std::mutex currentRenderMutex;  // Add mutex for thread safety
@@ -165,8 +171,7 @@ RenderQueue incomingRenderQueue;
 std::mutex incomingDeleteQueueMutex;  // Add mutex for thread safety
 std::mutex incomingRenderQueueMutex;  // Add mutex for thread safety
 
-
-/// Processes a file action
+/// Processes a file action libefsw
 class UpdateListener : public efsw::FileWatchListener {
   public:
 	UpdateListener() : should_stop_(false) {}
@@ -217,8 +222,16 @@ class UpdateListener : public efsw::FileWatchListener {
 		}
 		if (actionName == "Add" || actionName == "Modified") {
 			dl::String belPath = (dir + filename).c_str();
+            dl::String parentPath = dir.c_str();
+            //std::cout << "parentPath: " << parentPath.buf() << std::endl;
 			if (should_stop_) return;  // Check again before starting render
-			if (belPath.endsWith(".bsz")) {
+
+            if (parentPath.endsWith("download")) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                return;
+            }
+
+            if (belPath.endsWith(".bsz") || belPath.endsWith(".zip") && !parentPath.endsWith("download/")) {
                 {
                     std::lock_guard<std::mutex> lock(incomingRenderQueueMutex);
                     if (!incomingRenderQueue.contains(belPath)) {
@@ -339,17 +352,17 @@ public:
     //}
 
     // Called to update rendering progress (percentage, time remaining, etc)
-    void onProgress(String pass, Progress progress) override
-    {
-        std::cout << progress.toString().buf() << std::endl;
-        setString(new std::string(progress.toString().buf()));
-        logInfo("%s [%s]", progress.toString().buf(), pass.buf());
-    }
+    //void onProgress(String pass, Progress progress) override
+    //{
+    //    std::cout << progress.toString().buf() << std::endl;
+    //    setString(new std::string(progress.toString().buf()));
+    //    logInfo("%s [%s]", progress.toString().buf(), pass.buf());
+    //}
 
-    void onImage(String pass, Image image) override
-    {
-        logInfo("We got an image %d x %d.", (int)image.width(), (int)image.height());
-    }  
+    //void onImage(String pass, Image image) override
+    //{
+    //    logInfo("We got an image %d x %d.", (int)image.width(), (int)image.height());
+    //}  
 
     // Called when an error occurs during rendering
     void onError(String pass, String msg) override
@@ -555,6 +568,7 @@ void file_watcher_thread(const std::string& watch_path = "") {
  * --licenseinfo   : Show license information
  */
  #include "dl_core/dl_main.inl"
+ #include "dl_core/dl_args.h"
 int DL_main(Args& args)
 {
     // Default configuration values
@@ -1181,6 +1195,7 @@ void server_thread(     std::string server_skey,
     ctx.close();
 }
 
+
 void render_thread( Engine& engine,
                     MyEngineObserver& engineObserver) {
     // Create persistent instances outside the loop
@@ -1188,10 +1203,9 @@ void render_thread( Engine& engine,
     RenderQueue renderThreadDeleteQueue;
 
     while (true) {
-        // Append items from incoming queues to our persistent queues
+        // Append items from incoming queues to our persistent queues for thread safety
         {
             std::lock_guard<std::mutex> lock(incomingRenderQueueMutex);
-            // Process each item in the incoming queue and add it to our persistent queue
             dl::String path;
             while (incomingRenderQueue.pop(path)) {
                 renderThreadQueue.push(path);
@@ -1201,7 +1215,6 @@ void render_thread( Engine& engine,
         
         {
             std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
-            // Process each item in the incoming queue and add it to our persistent queue
             dl::String path;
             while (incomingDeleteQueue.pop(path)) {
                 renderThreadDeleteQueue.push(path);
@@ -1227,12 +1240,106 @@ void render_thread( Engine& engine,
             // We successfully got the render slot - no one else is rendering
             if (renderThreadQueue.pop(belPath)) {
                 std::cout << "\n==" << "RENDERING: " << belPath.buf() << "\n==" << std::endl;
-                engine.loadScene(belPath);
-                //engine.scene().camera()["resolution"]= Vec2 {100, 100};
-                engine.start();
-                {
-                    std::lock_guard<std::mutex> lock(currentRenderMutex);
-                    currentRender = belPath; 
+                if (belPath.endsWith(".bsz")) {
+                    engine.loadScene(belPath);
+                    //engine.scene().camera()["resolution"]= Vec2 {100, 100};
+                    engine.start();
+                    {
+                        std::lock_guard<std::mutex> lock(currentRenderMutex);
+                        currentRender = belPath; 
+                    }
+                } else if (belPath.endsWith(".zip")) {
+                    dl::Path fooPath = dl::Path(belPath);
+                    dl::String justDir = fooPath.dir();
+                    dl::String justName = fooPath.file(false);
+                    //auto previewPath = args.iPath().canonical();;
+                    dl::String previewPath = bella_sdk::previewPath();
+                    engine.loadScene(previewPath);
+                    auto oomerOutputPath = engine.scene().createNode("outputImagePath", "oomerOutputPath");
+                    oomerOutputPath["ext"] = ".jpg";
+                    auto oomerPBR = engine.scene().createNode("pbr", "oomerPBR");
+                    oomerPBR["file"] = justName;
+                    oomerPBR["ext"] = ".zip";
+                    oomerPBR["dir"] = justDir;
+                    auto oomerPreview = engine.scene().findNode("__preview__");
+                    auto oomerCamXform = engine.scene().findNode("__camera__");
+                    oomerPreview["material"] = oomerPBR;
+                    std::filesystem::path dirPath = std::string(justDir.buf())+"/"+std::string(justName.buf());
+                    bool success = std::filesystem::create_directory(dirPath);
+                    oomerOutputPath["dir"] = dirPath.string().c_str();
+                    //engine.scene().beautyPass()["outputExt"] = ".jpg";
+                    engine.scene().beautyPass()["targetNoise"] = dl::Int(10);
+                    engine.scene().beautyPass()["saveImage"] = dl::Int(0);
+                    engine.scene().beautyPass()["overridePath"] = oomerOutputPath;
+                    engine.scene().camera()["resolution"]= Vec2 {320, 320};
+
+                    std::ofstream outFile(dirPath.string()+"/bella.js");
+                    outFile << std::string("bellaScene=\"") << justName.buf() << std::string("\";") << std::endl;
+                    outFile << std::string("bellaNodeType=\"") << "foo1" << std::string("\";") << std::endl;
+                    outFile << std::string("bellaNode=\"") << "foo2" << std::string("\";") << std::endl;
+                    outFile << std::string("bellaNodeAttribute=\"") << "hhh" << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps=[];") << std::endl;
+                    outFile << std::string("bellaSteps[1]=\"") << -1.00000f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[2]=\"") << -0.93104f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[3]=\"") << -0.86208f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[4]=\"") << -0.79312f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[5]=\"") << -0.72414f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[6]=\"") << -0.65518f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[7]=\"") << -0.58622f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[8]=\"") << -0.51726f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[9]=\"") << -0.44828f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[10]=\"") << -0.37932f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[11]=\"") << -0.31036f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[12]=\"") << -0.24138f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[13]=\"") << -0.17242f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[14]=\"") << -0.10346f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[15]=\"") << -0.03450f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[16]=\"") << 0.03448f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[17]=\"") << 0.10344f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[18]=\"") << 0.17240f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[19]=\"") << 0.24136f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[20]=\"") << 0.31034f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[21]=\"") << 0.37930f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[22]=\"") << 0.44826f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[23]=\"") << 0.51724f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[24]=\"") << 0.58620f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[25]=\"") << 0.65516f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[26]=\"") << 0.72412f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[27]=\"") << 0.79310f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[28]=\"") << 0.86206f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[29]=\"") << 0.93102f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaSteps[30]=\"") << 1.00000f << std::string("\";") << std::endl;
+                    outFile << std::string("bellaQueue=[];") << std::endl;
+                    outFile.close();    
+                    std::ofstream outFile2(dirPath.string()+"/index.html");
+                    outFile2 << bellaSliderPreviewsHTML();
+                    outFile2.close();
+
+                    dl::Mat4 beginCamXform = oomerCamXform["steps"][0]["xform"].asMat4();
+                    for (int i = 1; i <= 30; i++) {
+                        auto offset = dl::Vec2 {i*0.1, 0.0};
+                        dl::bella_sdk::orbitCamera(engine.scene().cameraPath(),offset);
+
+                        char buffer[50];
+                        sprintf(buffer, "%04d", i);
+
+                        // Set the output filename with frame number
+                        //oomerOutputPath["file"] = fooPath.file(false) + dl::String("_") + dl::String(buffer);
+                        oomerOutputPath["file"] = dl::String("bella") + dl::String(buffer);
+                        
+                        // Start rendering
+                        engine.start();
+                        while (engine.rendering()) { //blocking
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        }
+                        engine.stop();
+                    }
+                    {
+                        std::lock_guard<std::mutex> lock(currentRenderMutex);
+                        currentRender = belPath; 
+                    }
+                } else {
+                    active_render = false;  // Release the render slot
                 }
             } else {
                 active_render = false;  // Release the render slot
@@ -1389,7 +1496,7 @@ ARE HEREBY DISCLAIMED.
 
 ====
 
-CppZMQ
+cppZMQ
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
@@ -1463,3 +1570,284 @@ This software is a fork of the "simplefilewatcher" by James Wynn (james@jameswyn
 http://code.google.com/p/simplefilewatcher/ also MIT licensed.
 
 )"; }
+
+
+std::string bellaSliderPreviewsHTML() {
+return R"HTML(
+<html>
+  <head>
+    <style type='text/css'>
+      body {
+        margin: 0;
+        background: #555;
+        font-family: sans-serif;
+        color: #ddd;
+      }
+      .container {
+        padding: 0.25em;
+      }
+      .image-panel {
+        padding: 0.5em;
+        background: #666;
+        border-radius: 0.35em;
+        margin: 8px;
+        display: inline-grid;
+        min-width: max-content;
+      }
+      .select {
+        margin-bottom: 1em;
+        background: #333;
+        color: #ddd;
+        border: none;
+        border-radius: 0.2em;
+        padding: 0.5em 0.75em;
+        font-size: .5em;
+      }
+      .image {
+        margin: auto;
+        background: #222;
+        min-width: 200px;
+        min-height: 200px;
+      }
+      .step {
+        font-size: 1.25em;
+        margin: -1.75em auto auto auto;
+        padding: 0.125em 0.5em;
+        border-radius: 0.2em;
+        background: #0004;
+        color: #fff;
+      }
+      .slider {
+        margin-top: 1.25em;
+      }
+      * {
+        box-sizing: border-box;
+      }   
+      .row {
+      float: top;
+      padding-top: 5px;
+      padding-left: 8px;
+      padding-right: 8px;
+      width: 100%;
+      }
+      .upper {
+        height: 5%;
+      }
+      .lower {
+        height: 95%;
+      }
+      .column:after {
+        content: "";
+        display: table;
+        clear: both;
+      }
+      a {
+      font-size: 14px; color: #f7f2eb; text-decoration: none;
+      }
+      a:active {
+      font-size: 14px; color: #ffffff; text-decoration: none;
+      }
+      a:hover {
+      font-size: 14px; color: #a77d9f; text-decoration: underline;
+      }
+      pre {
+      padding-left: 2em;
+      margin-top: 0px;
+      font-size: 12px;
+      font-family: sans-serif;
+      color: #999;
+      }
+    </style>
+    <script type='text/javascript'>
+    
+      // I guess the bella.js must be a generated file and these could be moved there.
+      //
+      //var steps = [];
+      //var bella_type = "unknown_type"
+      //var bella_node = "unknown_node"
+      //var bella_attribute = "unknown_attr"
+      
+      // So, script tags call this with the image prefix they want; we create all the elements,
+      // load the initial image, wire up events, and preload the other images for this prefix.
+      //
+      var createImagePanel = (prefix, firstStep, lastStep) => {
+      
+        // Load the steps array. We expect the .js file to contain an array of step labels, in
+        // an array named for the prefix (e.g. 'var bellaSteps = [];'), which we will use below
+        // to make sure we look up the step label values from the correct array.
+        //
+        var script = document.createElement('script');
+        script.src = prefix + '.js';
+        document.head.appendChild(script);
+
+        script.onerror = () => {
+          
+          var errorText = `File '${prefix}.js' was not found.`;
+          console.error(errorText);
+          
+          var container = document.scripts[document.scripts.length-1].parentNode;
+          var panel = document.createElement('div');
+          container.appendChild(panel);
+          panel.className = 'image-panel error';
+          panel.innerText = errorText;
+        };
+
+        script.onload = () => {
+          
+          var debugPreloading = false;
+          
+          // The step labels for this prefix have been loaded, so we look for them by name.
+          //
+          var stepLabels = () => window[prefix + 'Steps'];
+        
+          // Build an image path given a prefix and index.
+          //
+          var imageFilename = (prefix, idx) => {
+            return prefix+idx.toString().padStart(4, '0')+'.jpg';
+          };
+          
+          // Not really tested but this should handle the preloading.
+          //
+          var preloadImage = (prefix, step) => {
+            var img = document.createElement('img');
+            var preloadNextImage = () => {
+              if (step < lastStep) {
+                preloadImage(prefix, step+1);
+              } else {
+                if (debugPreloading) {
+                  console.log(`Finished preloading prefix '${prefix}' at step ${step}.`);
+                }
+              }
+            };
+            img.onload = () => {
+              if (debugPreloading) {
+                console.log(`Loaded step ${step} for prefix '${prefix}'.`);
+              }
+              preloadNextImage();
+            };
+            img.onerror = () => {
+              console.error(`Failed to load step ${step} for prefix '${prefix}'.`);
+              preloadNextImage();
+            };
+            img.src = imageFilename(prefix, step);
+          };
+          
+          // Now actually create the elements.
+          //
+          var container = document.scripts[document.scripts.length-1].parentNode;
+          var panel = document.createElement('div');
+          container.appendChild(panel);
+          panel.className = 'image-panel';
+          
+          var dropdown = document.createElement('select');
+          panel.appendChild(dropdown);
+          dropdown.className = 'select';
+          dropdown.autocomplete = 'off';
+          
+          for (var i = 0; i < 7; ++i) {
+            if (i == 0) {
+              var option = document.createElement('option');
+              dropdown.appendChild(option);
+              option.value = '';
+              option.selected = '';
+              option.innerText = 'Auto (actual image size)';
+            } else if (i > 2) {
+              var option = document.createElement('option');
+              dropdown.appendChild(option);
+              option.value = i + '00px';
+              option.innerText = i + '00 px';
+            }
+          }
+          
+          var image = document.createElement('img');
+          panel.appendChild(image);
+          image.className = 'image';
+          
+          var step = document.createElement('div');
+          panel.appendChild(step);
+          step.className = 'step';
+          
+          var slider = document.createElement('input');
+          panel.appendChild(slider);
+          slider.className = 'slider';
+          slider.type = 'range';
+          slider.autocomplete = 'off';
+          slider.min = firstStep;
+          slider.max = lastStep;
+          slider.step = '1';
+          slider.value = firstStep;
+          
+          var selectSize = () => {
+            image.style.width = dropdown.value;
+          };
+          
+          var selectImage = () => {
+            step.innerText = stepLabels()[slider.value];
+            image.onerror = () => { image.src = 'missing.jpg'; }
+            image.src = imageFilename(prefix, slider.value);
+          };
+          
+          // Select new image size & images on events.
+          //
+          dropdown.onchange = () => selectSize();
+          slider.oninput = () => selectImage();
+          
+          // Load the first image for this panel.
+          //
+          selectImage(slider);
+          
+          // Give awhile for each panel to load its first image before preloading the rest.
+          //
+          setTimeout(() => preloadImage(prefix, firstStep+1), 1000);
+        };
+      };
+    function bella_strings() {
+      document.getElementById("bella_scene").innerHTML = bellaScene;
+      document.getElementById("bella_type").innerHTML = bellaNodeType;
+      document.getElementById("bella_node").innerHTML = bellaNode;
+      document.getElementById("bella_attribute").innerHTML = bellaNodeAttribute;
+      htmlFragment="";
+      bellaQueue.forEach(item => htmlFragment+=item+"<br>");
+      document.getElementById("bellaFragment").innerHTML = htmlFragment;
+    };
+    </script>
+    <script src='bella.js'></script>
+  </head>
+  <body onload="bella_strings()">
+
+    <div class="column">
+      <div class="row upper" style="background-color:#444;">
+        <a href=../directory.html id="bella_scene"></a> &nbsp; > &nbsp;
+        <a href=../directory.html id="bella_type"></a> &nbsp; > &nbsp;
+        <a href=../directory.html id="bella_node"></a> &nbsp; > &nbsp; <a href=../directory.html id="bella_attribute"></a>  
+
+      </div>
+
+      <div class="row lower" style="background-color:#555;">
+        <div class='container'>
+          
+          <!-- Here is what the panels look like -->
+          
+          <!--div class='image-panel'>
+            <select class='select' autocomplete='off' onchange='selectSize(this)'>
+              <option value='' selected >Auto (actual image size)</option>
+              <option value='400px'>400 px</option>
+              <option value='500px'>500 px</option>
+              <option value='600px'>600 px</option>
+            </select>
+            <img class='image' />
+            <div class='step'></div>
+            <input class='slider' type='range' autocomplete='off' step='1' oninput="selectImage(this)" />
+          </div-->
+          
+          <!-- but we create them like this instead; each would refer to a different image set -->
+          
+          <script type='text/javascript'>createImagePanel('bella', 1, 30);</script>
+          <script type='text/javascript'>createImagePanel('bella', 1, 30);</script>
+        </div>
+        <pre id="bellaFragment"></pre>
+      </div> 
+    </div> 
+  </body>
+</html>
+)HTML"; }
