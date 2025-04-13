@@ -157,6 +157,7 @@ private:
 };
 
 std::atomic<bool> active_render(false);
+//bool active_render(false);
 //RenderQueue renderQueue;  // Replace the old vector and map with our new class
 //std::mutex renderQueueMutex;  // Add mutex for thread safety
 //std::vector<dl::String> renderDelete; // This is the efsw queue for when we delete a file
@@ -207,15 +208,13 @@ class UpdateListener : public efsw::FileWatchListener {
 						 filename + ") has event "
 				  << actionName << std::endl;*/
 		if (actionName == "Delete") {
-            if (active_render || !incomingRenderQueue.empty()) { 
-                dl::String belPath = (dir +  filename).c_str();
-                if (belPath.endsWith(".bsz")) {
-                    {
-                        std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
-                        if (!incomingDeleteQueue.contains(belPath)) {
-                            incomingDeleteQueue.push(belPath);
-                            std::cout << "\n==" << "STOP RENDER: " << belPath.buf() << "\n==" << std::endl;
-                        }
+            dl::String belPath = (dir +  filename).c_str();
+            if (belPath.endsWith(".bsz") || belPath.endsWith(".zip")) {
+                {
+                    std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
+                    if (!incomingDeleteQueue.contains(belPath)) {
+                        incomingDeleteQueue.push(belPath);
+                        std::cout << "\n==" << "STOP RENDER: " << belPath.buf() << "\n==" << std::endl;
                     }
                 }
             }
@@ -352,12 +351,12 @@ public:
     //}
 
     // Called to update rendering progress (percentage, time remaining, etc)
-    //void onProgress(String pass, Progress progress) override
-    //{
-    //    std::cout << progress.toString().buf() << std::endl;
-    //    setString(new std::string(progress.toString().buf()));
-    //    logInfo("%s [%s]", progress.toString().buf(), pass.buf());
-    //}
+    void onProgress(String pass, Progress progress) override
+    {
+        std::cout << progress.toString().buf() << std::endl;
+        setString(new std::string(progress.toString().buf()));
+        logInfo("%s [%s]", progress.toString().buf(), pass.buf());
+    }
 
     //void onImage(String pass, Image image) override
     //{
@@ -406,10 +405,10 @@ private:
 void server_thread(     std::string server_skey, 
                         uint16_t command_port,
                         bool test_render,
-                        Engine& engine,
+                        Engine engine,
                         MyEngineObserver& engineObserver);
 
-void render_thread( Engine& engine,
+void render_thread( Engine engine,
                     MyEngineObserver& engineObserver);
 
 /*
@@ -707,9 +706,10 @@ int DL_main(Args& args)
             std::cout << "\ncurve keypair gen failed.";
             exit(EXIT_FAILURE);
         }
-        std::thread server_t(server_thread, server_skey, command_port, test_render, std::ref(engine), std::ref(engineObserver));
-        std::thread render_t(render_thread, std::ref(engine), std::ref(engineObserver));
-        ///std::thread heartbeat_t(heartbeat_thread, server_skey, server.load(), 5555);
+
+        std::thread server_t(server_thread, server_skey, command_port, test_render, engine, std::ref(engineObserver));
+        std::thread render_t(render_thread, engine, std::ref(engineObserver));
+
         std::thread heartbeat_t(heartbeat_thread,   //function
                                 "",                 //NA Public server key 
                                 server_skey,        //Secret servery key 
@@ -1034,7 +1034,7 @@ void client_thread( std::string server_pkey,
 void server_thread(     std::string server_skey, 
                         uint16_t command_port,
                         bool test_render,
-                        Engine& engine,
+                        Engine engine,
                         MyEngineObserver& engineObserver) {
     //MyEngineObserver engineObserver;
     //engine.subscribe(&engineObserver);
@@ -1121,7 +1121,8 @@ void server_thread(     std::string server_skey,
                 }
 
             } else if (client_command == "stat") {
-                std::string currentProgress = engineObserver.getProgress();
+                //std::string currentProgress = engineObserver.getProgress();
+                std::string currentProgress = "100%";
                 if (!currentProgress.empty()) {
                     std::cout << "Current Progress: " << currentProgress << std::endl;
                     command_sock.send(zmq::message_t(currentProgress), zmq::send_flags::none); 
@@ -1196,7 +1197,7 @@ void server_thread(     std::string server_skey,
 }
 
 
-void render_thread( Engine& engine,
+void render_thread( Engine engine,
                     MyEngineObserver& engineObserver) {
     // Create persistent instances outside the loop
     RenderQueue renderThreadQueue;
@@ -1314,29 +1315,42 @@ void render_thread( Engine& engine,
                     std::ofstream outFile2(dirPath.string()+"/index.html");
                     outFile2 << bellaSliderPreviewsHTML();
                     outFile2.close();
-
-                    dl::Mat4 beginCamXform = oomerCamXform["steps"][0]["xform"].asMat4();
-                    for (int i = 1; i <= 30; i++) {
-                        auto offset = dl::Vec2 {i*0.1, 0.0};
-                        dl::bella_sdk::orbitCamera(engine.scene().cameraPath(),offset);
-
-                        char buffer[50];
-                        sprintf(buffer, "%04d", i);
-
-                        // Set the output filename with frame number
-                        //oomerOutputPath["file"] = fooPath.file(false) + dl::String("_") + dl::String(buffer);
-                        oomerOutputPath["file"] = dl::String("bella") + dl::String(buffer);
-                        
-                        // Start rendering
-                        engine.start();
-                        while (engine.rendering()) { //blocking
-                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                        }
-                        engine.stop();
-                    }
                     {
                         std::lock_guard<std::mutex> lock(currentRenderMutex);
                         currentRender = belPath; 
+                        active_render = true;
+                    }
+
+                    bool stop_loop = false;
+                    for (int i = 1; i <= 30; i++) {
+                        auto offset = dl::Vec2 {i*0.1, 0.0};
+                        dl::bella_sdk::orbitCamera(engine.scene().cameraPath(),offset);
+                        oomerOutputPath["file"] = dl::String::format("bella%04d",i);
+
+
+                        engine.start();
+                        while (engine.rendering()) { //blocking so we only do one frame at a time
+                            // since we are looping here we don't check for file dequeing
+                            {
+                                std::lock_guard<std::mutex> lock(incomingDeleteQueueMutex);
+                                dl::String path;
+                                while (incomingDeleteQueue.pop(path)) { // transfer to this thread's delete queue
+                                    renderThreadDeleteQueue.push(path);
+                                }
+                                incomingDeleteQueue.clear(); // empty file queue    
+                                if (renderThreadDeleteQueue.contains(belPath)) {
+                                    renderThreadDeleteQueue.remove(belPath);
+                                    active_render = false;
+                                    engine.stop();
+                                    stop_loop = true;
+                                    break;
+                                }
+                            }
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        }
+                        if (stop_loop) {
+                            break;
+                        }
                     }
                 } else {
                     active_render = false;  // Release the render slot
