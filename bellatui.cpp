@@ -45,6 +45,7 @@
 #include <efsw/FileSystem.hpp> // For file watching
 #include <efsw/System.hpp> // For file watching
 #include <efsw/efsw.hpp> // For file watching
+
 #include <iostream>
 #include <signal.h>
 
@@ -53,6 +54,15 @@
 #include "../bella_engine_sdk/src/dl_core/dl_fs.h" // For rendering
 using namespace dl;
 using namespace dl::bella_sdk;
+
+//#include "../oom/oom_bella_long.h"   
+//#include "../oom/oom_bella_scene.h"   
+//#include "../oom/oom_misc.h"         // common misc code
+#include "../oom/oom_license.h"        // common license
+//#include "../oom/oom_voxel_vmax.h"   // common vmax voxel code and structures
+//#include "../oom/oom_voxel_ogt.h"    // common opengametools voxel conversion wrappers
+
+
 
 //Forward declarations
 std::string bellaSliderPreviewsHTML(); 
@@ -246,8 +256,8 @@ class UpdateListener : public efsw::FileWatchListener {
 };
 
 // Global state variables
-std::string initializeGlobalLicense();        // Function to return license text
-std::string initializeGlobalThirdPartyLicences(); // Function to return third-party licenses
+//std::string initializeGlobalLicense();        // Function to return license text
+//std::string initializeGlobalThirdPartyLicences(); // Function to return third-party licenses
 std::atomic<bool> connection_state (false);   // Tracks if client/server are connected
 std::atomic<bool> abort_state (false);        // Used to signal program termination
 std::atomic<bool> server (true);             // Indicates if running in server mode
@@ -630,17 +640,23 @@ int DL_main(Args& args)
     // Show license information if requested
     if (args.have("--licenseinfo"))
     {
-        std::cout << initializeGlobalLicense() << std::endl;
+        std::cout << "bellatui Copyright (c) Harvey Fong 2025" << std::endl;
+        std::cout << oom::license::printLicense() << std::endl;
         return 0;
     }
  
     // Show third-party licenses if requested
     if (args.have("--thirdparty"))
     {
-        std::cout << initializeGlobalThirdPartyLicences() << std::endl;
+        std::cout << oom::license::printBellaSDK() << "\n====\n" << std::endl;
+        std::cout << oom::license::printLibSodium() << "\n====\n" << std::endl;
+        std::cout << oom::license::printLibZMQ() << "\n====\n" << std::endl;
+        std::cout << oom::license::printCppZMQ() << "\n====\n" << std::endl;
+        std::cout << oom::license::printEFSW() << "\n====\n" << std::endl;
         return 0;
     }
  
+    // Check if running in server mode
     // Check if running in server mode
     if (args.have("--client"))
     {
@@ -1381,7 +1397,6 @@ void render_thread( Engine engine,
     }
 }
 
-
 void openFileWithDefaultProgram(const std::string& filePath) {
 #ifdef _WIN32
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
@@ -1467,124 +1482,6 @@ void pkey_server(const std::string& pub_key, uint16_t publickey_port) {
     sock.close();
     ctx.close();
 }
-
-std::string initializeGlobalLicense() {
-    return R"(
-bellatui
-
-Copyright (c) 2025 Harvey Fong
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.)"; }
-
-std::string initializeGlobalThirdPartyLicences() {
-return R"(
-====
-
-Bella SDK (Software Development Kit)
-
-Copyright Diffuse Logic SCP, all rights reserved.
-
-Permission is hereby granted to any person obtaining a copy of this software
-(the "Software"), to use, copy, publish, distribute, sublicense, and/or sell
-copies of the Software.
-
-THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY. ALL
-IMPLIED WARRANTIES OF FITNESS FOR ANY PARTICULAR PURPOSE AND OF MERCHANTABILITY
-ARE HEREBY DISCLAIMED.
-
-====
-
-cppZMQ
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to
-deal in the Software without restriction, including without limitation the
-rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-sell copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-IN THE SOFTWARE.
-
-====
-
-libsodium
-
-
-ISC License
-
-Copyright (c) 2013-2025
-Frank Denis <j at pureftpd dot org>
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
- =====
-
- libzmq is free software; you can redistribute it and/or modify it under the terms of the Mozilla Public License Version 2.0.)
-
-=====
-
-efsw
-
-Copyright (c) 2020 Martín Lucas Golini
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-This software is a fork of the "simplefilewatcher" by James Wynn (james@jameswynn.com)
-http://code.google.com/p/simplefilewatcher/ also MIT licensed.
-
-)"; }
-
 
 std::string bellaSliderPreviewsHTML() {
 return R"HTML(
